@@ -32,7 +32,7 @@ use core::num::NonZeroUsize;
 use num_traits::{ToPrimitive, Zero};
 
 use super::errors::runner_errors::RunnerError;
-use super::runners::builtin_runner::OUTPUT_BUILTIN_NAME;
+use super::runners::builtin_runner::{OutputBuiltinRunner, OUTPUT_BUILTIN_NAME};
 
 const MAX_TRACEBACK_ENTRIES: u32 = 20;
 
@@ -941,6 +941,19 @@ impl VirtualMachine {
         }
 
         Err(VirtualMachineError::NoSignatureBuiltin)
+    }
+
+    /// Returns a mutable reference to the output builtin.
+    ///
+    /// Returns Err(VirtualMachineError::NoOutputBuiltin) if there is no output builtin
+    /// configured.
+    pub fn get_output_builtin(&mut self) -> Result<&mut OutputBuiltinRunner, VirtualMachineError> {
+        for builtin in self.get_builtin_runners_as_mut() {
+            if let BuiltinRunner::Output(output_builtin) = builtin {
+                return Ok(output_builtin);
+            }
+        }
+        Err(VirtualMachineError::NoOutputBuiltin)
     }
     pub fn disable_trace(&mut self) {
         self.trace = None
