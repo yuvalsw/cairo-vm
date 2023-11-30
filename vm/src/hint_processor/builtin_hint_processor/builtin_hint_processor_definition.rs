@@ -20,6 +20,7 @@ use super::{
         pack::*,
     },
 };
+use crate::hint_processor::builtin_hint_processor::bootloader_hints::prepare_simple_bootloader_output_segment;
 use crate::Felt252;
 use crate::{
     hint_processor::{
@@ -816,6 +817,14 @@ impl HintProcessorLogic for BuiltinHintProcessor {
             }
             hint_code::EC_RECOVER_PRODUCT_DIV_M => ec_recover_product_div_m(exec_scopes),
             hint_code::SPLIT_XX => split_xx(vm, &hint_data.ids_data, &hint_data.ap_tracking),
+            hint_code::BOOTLOADER_PREPARE_SIMPLE_BOOTLOADER_OUTPUT_SEGMENT => {
+                prepare_simple_bootloader_output_segment(
+                    vm,
+                    exec_scopes,
+                    &hint_data.ids_data,
+                    &hint_data.ap_tracking,
+                )
+            }
             #[cfg(feature = "skip_next_instruction_hint")]
             hint_code::SKIP_NEXT_INSTRUCTION => skip_next_instruction(vm),
             #[cfg(feature = "print")]
