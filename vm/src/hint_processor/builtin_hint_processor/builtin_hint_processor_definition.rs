@@ -20,7 +20,9 @@ use super::{
         pack::*,
     },
 };
-use crate::hint_processor::builtin_hint_processor::bootloader_hints::prepare_simple_bootloader_output_segment;
+use crate::hint_processor::builtin_hint_processor::bootloader_hints::{
+    prepare_simple_bootloader_input, prepare_simple_bootloader_output_segment,
+};
 use crate::Felt252;
 use crate::{
     hint_processor::{
@@ -824,6 +826,9 @@ impl HintProcessorLogic for BuiltinHintProcessor {
                     &hint_data.ids_data,
                     &hint_data.ap_tracking,
                 )
+            }
+            hint_code::BOOTLOADER_PREPARE_SIMPLE_BOOTLOADER_INPUT => {
+                prepare_simple_bootloader_input(exec_scopes)
             }
             #[cfg(feature = "skip_next_instruction_hint")]
             hint_code::SKIP_NEXT_INSTRUCTION => skip_next_instruction(vm),
