@@ -22,6 +22,7 @@ use super::{
 };
 use crate::hint_processor::builtin_hint_processor::bootloader_hints::{
     prepare_simple_bootloader_input, prepare_simple_bootloader_output_segment,
+    restore_bootloader_output,
 };
 use crate::Felt252;
 use crate::{
@@ -826,6 +827,9 @@ impl HintProcessorLogic for BuiltinHintProcessor {
                     &hint_data.ids_data,
                     &hint_data.ap_tracking,
                 )
+            }
+            hint_code::BOOTLOADER_RESTORE_BOOTLOADER_OUTPUT => {
+                restore_bootloader_output(vm, exec_scopes)
             }
             hint_code::BOOTLOADER_PREPARE_SIMPLE_BOOTLOADER_INPUT => {
                 prepare_simple_bootloader_input(exec_scopes)
