@@ -1465,3 +1465,5 @@ pub const BOOTLOADER_IMPORT_PACKED_OUTPUT_SCHEMAS: &str =
     CompositePackedOutput,
     PlainPackedOutput,
 )";
+
+pub const BOOTLOADER_IS_PLAIN_PACKED_OUTPUT: &str = "isinstance(packed_output, PlainPackedOutput)";
