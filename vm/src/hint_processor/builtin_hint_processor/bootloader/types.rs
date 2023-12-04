@@ -1,5 +1,7 @@
+use crate::types::program::Program;
 use felt::Felt252;
 use serde::Deserialize;
+use std::path::Path;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct BootloaderConfig {
@@ -25,6 +27,13 @@ pub struct FactTopology {}
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct Task {}
+
+impl Task {
+    pub fn get_program(&self) -> Program {
+        // TODO: implement this method correctly
+        Program::from_file(Path::new("../cairo_programs/fibonacci.json"), Some("main")).unwrap()
+    }
+}
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct SimpleBootloaderInput {
