@@ -1467,3 +1467,15 @@ pub const BOOTLOADER_IMPORT_PACKED_OUTPUT_SCHEMAS: &str =
 )";
 
 pub const BOOTLOADER_IS_PLAIN_PACKED_OUTPUT: &str = "isinstance(packed_output, PlainPackedOutput)";
+
+pub const BOOTLOADER_SAVE_OUTPUT_POINTER: &str = "output_start = ids.output_ptr";
+
+pub const BOOTLOADER_SAVE_PACKED_OUTPUTS: &str = "packed_outputs = bootloader_input.packed_outputs";
+
+pub const BOOTLOADER_GUESS_PRE_IMAGE_OF_SUBTASKS_OUTPUT_HASH: &str =
+    "data = packed_output.elements_for_hash()
+ids.nested_subtasks_output_len = len(data)
+ids.nested_subtasks_output = segments.gen_arg(data)";
+
+pub const BOOTLOADER_SET_PACKED_OUTPUT_TO_SUBTASKS: &str =
+    "packed_outputs = packed_output.subtasks";

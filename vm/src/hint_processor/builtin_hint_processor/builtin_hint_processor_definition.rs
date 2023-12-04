@@ -1,5 +1,9 @@
 use super::{
     blake2s_utils::finalize_blake2s_v3,
+    bootloader_hints::{
+        guess_pre_image_of_subtasks_output_hash, save_output_pointer, save_packed_outputs,
+        set_packed_output_to_subtasks,
+    },
     ec_recover::{
         ec_recover_divmod_n_packed, ec_recover_product_div_m, ec_recover_product_mod,
         ec_recover_sub_a_b,
@@ -844,6 +848,21 @@ impl HintProcessorLogic for BuiltinHintProcessor {
                 &hint_data.ids_data,
                 &hint_data.ap_tracking,
             ),
+            hint_code::BOOTLOADER_SAVE_OUTPUT_POINTER => {
+                save_output_pointer(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::BOOTLOADER_SAVE_PACKED_OUTPUTS => save_packed_outputs(exec_scopes),
+            hint_code::BOOTLOADER_GUESS_PRE_IMAGE_OF_SUBTASKS_OUTPUT_HASH => {
+                guess_pre_image_of_subtasks_output_hash(
+                    vm,
+                    exec_scopes,
+                    &hint_data.ids_data,
+                    &hint_data.ap_tracking,
+                )
+            }
+            hint_code::BOOTLOADER_SET_PACKED_OUTPUT_TO_SUBTASKS => {
+                set_packed_output_to_subtasks(exec_scopes)
+            }
             hint_code::BOOTLOADER_IMPORT_PACKED_OUTPUT_SCHEMAS => import_packed_output_schemas(),
             #[cfg(feature = "skip_next_instruction_hint")]
             hint_code::SKIP_NEXT_INSTRUCTION => skip_next_instruction(vm),

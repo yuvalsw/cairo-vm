@@ -1,13 +1,12 @@
 use std::any::Any;
 use std::collections::HashMap;
 
+use felt::Felt252;
 use num_traits::ToPrimitive;
 use serde::Deserialize;
 
-use felt::Felt252;
-
 use crate::hint_processor::builtin_hint_processor::hint_utils::{
-    get_integer_from_var_name, insert_value_from_var_name, insert_value_into_ap,
+    get_integer_from_var_name, get_ptr_from_var_name, insert_value_from_var_name, insert_value_into_ap,
 };
 use crate::hint_processor::hint_processor_definition::HintReference;
 use crate::serde::deserialize_program::ApTracking;
@@ -46,6 +45,13 @@ pub struct BootloaderConfig {
 pub enum PackedOutput {
     Plain(Vec<Felt252>),
     Composite(Vec<Felt252>),
+}
+
+impl PackedOutput {
+    // TODO: implement and define return type
+    pub fn elements_for_hash(&self) -> Vec<()> {
+        Default::default()
+    }
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -278,22 +284,107 @@ pub fn is_plain_packed_output(
     Ok(())
 }
 
+/*
+Implements hint:
+%{
+    output_start = ids.output_ptr
+%}
+*/
+pub fn save_output_pointer(
+    vm: &mut VirtualMachine,
+    exec_scopes: &mut ExecutionScopes,
+    ids_data: &HashMap<String, HintReference>,
+    ap_tracking: &ApTracking,
+) -> Result<(), HintError> {
+    let output_ptr = get_ptr_from_var_name("output_ptr", vm, ids_data, ap_tracking)?;
+    exec_scopes.insert_value("output_start", output_ptr);
+    Ok(())
+}
+
+/*
+Implements hint:
+%{
+    packed_outputs = bootloader_input.packed_outputs
+%}
+*/
+pub fn save_packed_outputs(exec_scopes: &mut ExecutionScopes) -> Result<(), HintError> {
+    let bootloader_input: BootloaderInput = exec_scopes.get("bootloader_input")?;
+    let packed_outputs = bootloader_input.packed_outputs;
+    exec_scopes.insert_value("packed_outputs", packed_outputs);
+    Ok(())
+}
+
+/*
+Implements hint:
+%{
+    packed_outputs = packed_output.subtasks
+%}
+*/
+pub fn set_packed_output_to_subtasks(exec_scopes: &mut ExecutionScopes) -> Result<(), HintError> {
+    let packed_outputs = exec_scopes.get::<Felt252>("packed_output")?; // TODO: need real type
+    let subtasks = packed_outputs; // TODO: need type for packed_output / query its subtasks field
+    exec_scopes.insert_value("packed_outputs", subtasks);
+    Ok(())
+}
+
+/*
+Implements hint:
+%{
+    data = packed_output.elements_for_hash()
+    ids.nested_subtasks_output_len = len(data)
+    ids.nested_subtasks_output = segments.gen_arg(data)";
+%}
+*/
+pub fn guess_pre_image_of_subtasks_output_hash(
+    vm: &mut VirtualMachine,
+    exec_scopes: &mut ExecutionScopes,
+    ids_data: &HashMap<String, HintReference>,
+    ap_tracking: &ApTracking,
+) -> Result<(), HintError> {
+    let packed_output = exec_scopes.get::<PackedOutput>("packed_output")?;
+    let data = packed_output.elements_for_hash();
+    insert_value_from_var_name(
+        "nested_subtasks_output_len",
+        data.len(),
+        vm,
+        ids_data,
+        ap_tracking,
+    )?;
+    // TODO: equivalent of 'segments.gen_arg'
+    insert_value_from_var_name(
+        "nested_subtasks_output",
+        Felt252::from(42),
+        vm,
+        ids_data,
+        ap_tracking,
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
+    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData;
+    use crate::hint_processor::builtin_hint_processor::hint_code;
+    use crate::hint_processor::builtin_hint_processor::hint_utils::{
+        get_integer_from_var_name, get_maybe_relocatable_from_var_name,
+    };
+    use crate::hint_processor::hint_processor_definition::HintProcessorLogic;
     use std::ops::Add;
 
     use num_traits::ToPrimitive;
     use rstest::{fixture, rstest};
 
-    use crate::hint_processor::builtin_hint_processor::hint_utils::{
-        get_maybe_relocatable_from_var_name, get_ptr_from_var_name,
-    };
+    use crate::hint_processor::builtin_hint_processor::hint_utils::get_ptr_from_var_name;
     use crate::hint_processor::hint_processor_definition::HintReference;
+    use crate::serde::deserialize_program::OffsetValue;
     use crate::types::exec_scope::ExecutionScopes;
     use crate::types::relocatable::MaybeRelocatable;
     use crate::utils::test_utils::*;
     use crate::vm::runners::builtin_runner::BuiltinRunner;
     use crate::vm::vm_core::VirtualMachine;
+    use crate::{any_box, relocatable};
+    use assert_matches::assert_matches;
 
     use super::*;
 
@@ -593,5 +684,159 @@ mod tests {
             &mut exec_scopes,
             composite_packed_output
         ));
+    }
+
+    #[test]
+    fn test_save_output_pointer() {
+        let mut vm = vm!();
+        vm.segments = segments![((1, 0), (0, 0))];
+        let mut hint_ref = HintReference::new(0, 0, true, false);
+        hint_ref.offset2 = OffsetValue::Value(2);
+        let ids_data = HashMap::from([("output_ptr".to_string(), hint_ref)]);
+
+        let mut exec_scopes = ExecutionScopes::new();
+
+        let hint_data = HintProcessorData::new_default(
+            String::from(hint_code::BOOTLOADER_SAVE_OUTPUT_POINTER),
+            ids_data,
+        );
+        let mut hint_processor = BuiltinHintProcessor::new_empty();
+        assert_matches!(
+            hint_processor.execute_hint(
+                &mut vm,
+                &mut exec_scopes,
+                &any_box!(hint_data),
+                &HashMap::new(),
+            ),
+            Ok(())
+        );
+
+        let output_ptr = exec_scopes.get::<Relocatable>("output_start");
+        assert_matches!(
+            output_ptr,
+            Ok(x) if x == relocatable!(0, 2)
+        );
+    }
+
+    #[test]
+    fn test_save_packed_ouputs() {
+        let packed_outputs = vec![
+            PackedOutput::Plain(Default::default()),
+            PackedOutput::Plain(Default::default()),
+            PackedOutput::Plain(Default::default()),
+        ];
+
+        let bootloader_input = BootloaderInput {
+            simple_bootloader_input: SimpleBootloaderInput {
+                fact_topologies_path: None,
+                single_page: false,
+            },
+            bootloader_config: BootloaderConfig {
+                simple_bootloader_program_hash: 42u64.into(),
+                supported_cairo_verifier_program_hashes: Default::default(),
+            },
+            packed_outputs: packed_outputs.clone(),
+        };
+
+        let mut vm = vm!();
+        let mut exec_scopes = ExecutionScopes::new();
+
+        exec_scopes.insert_box("bootloader_input", Box::new(bootloader_input.clone()));
+
+        let hint_data = HintProcessorData::new_default(
+            String::from(hint_code::BOOTLOADER_SAVE_PACKED_OUTPUTS),
+            HashMap::new(),
+        );
+        let mut hint_processor = BuiltinHintProcessor::new_empty();
+        assert_matches!(
+            hint_processor.execute_hint(
+                &mut vm,
+                &mut exec_scopes,
+                &any_box!(hint_data),
+                &HashMap::new(),
+            ),
+            Ok(())
+        );
+
+        let saved_packed_outputs = exec_scopes.get::<Vec<PackedOutput>>("packed_outputs");
+        assert_matches!(
+            saved_packed_outputs,
+            Ok(ref x) if x == &packed_outputs
+        );
+
+        assert_eq!(
+            saved_packed_outputs.expect("asserted Ok above, qed").len(),
+            3
+        );
+    }
+
+    #[test]
+    fn test_set_packed_output_to_subtasks() {
+        use felt::Felt252;
+
+        let mut vm = vm!();
+        let mut exec_scopes = ExecutionScopes::new();
+
+        exec_scopes.insert_box("packed_output", Box::new(Felt252::from(42)));
+
+        let hint_data = HintProcessorData::new_default(
+            String::from(hint_code::BOOTLOADER_SET_PACKED_OUTPUT_TO_SUBTASKS),
+            HashMap::new(),
+        );
+        let mut hint_processor = BuiltinHintProcessor::new_empty();
+        assert_matches!(
+            hint_processor.execute_hint(
+                &mut vm,
+                &mut exec_scopes,
+                &any_box!(hint_data),
+                &HashMap::new(),
+            ),
+            Ok(())
+        );
+
+        let packed_outputs = exec_scopes.get::<Felt252>("packed_outputs");
+        assert_matches!(
+            packed_outputs,
+            Ok(x) if x == Felt252::from(42)
+        );
+    }
+
+    #[test]
+    fn test_guess_pre_image_of_subtasks_output_hash() {
+        let mut vm = vm!();
+        add_segments!(vm, 2);
+        vm.run_context.fp = 2;
+
+        let ids_data = ids_data!["nested_subtasks_output_len", "nested_subtasks_output"];
+
+        let mut exec_scopes = ExecutionScopes::new();
+
+        exec_scopes.insert_box(
+            "packed_output",
+            Box::new(PackedOutput::Plain(Default::default())),
+        );
+
+        let ap_tracking = ApTracking::new();
+
+        assert_matches!(
+            run_hint!(
+                vm,
+                ids_data.clone(),
+                hint_code::BOOTLOADER_GUESS_PRE_IMAGE_OF_SUBTASKS_OUTPUT_HASH,
+                &mut exec_scopes
+            ),
+            Ok(())
+        );
+        let nested_subtasks_output_len =
+            get_integer_from_var_name("nested_subtasks_output_len", &vm, &ids_data, &ap_tracking)
+                .expect("nested_subtasks_output_len should be set")
+                .into_owned();
+        assert_eq!(nested_subtasks_output_len, 0.into());
+
+        let nested_subtasks_output =
+            get_integer_from_var_name("nested_subtasks_output", &vm, &ids_data, &ap_tracking)
+                .expect("nested_subtasks_output should be set")
+                .into_owned();
+        assert_eq!(nested_subtasks_output, 42.into());
     }
 }
