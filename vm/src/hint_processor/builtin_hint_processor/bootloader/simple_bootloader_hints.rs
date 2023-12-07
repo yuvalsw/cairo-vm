@@ -1,3 +1,4 @@
+use starknet_types_core::felt::NonZeroFelt;
 use std::collections::HashMap;
 
 use crate::Felt252;
@@ -7,7 +8,8 @@ use crate::hint_processor::builtin_hint_processor::bootloader::types::{
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::vars;
 use crate::hint_processor::builtin_hint_processor::hint_utils::{
-    get_ptr_from_var_name, insert_value_from_var_name,
+    get_integer_from_var_name, get_ptr_from_var_name, insert_value_from_var_name,
+    insert_value_into_ap,
 };
 use crate::hint_processor::hint_processor_definition::HintReference;
 use crate::serde::deserialize_program::ApTracking;
@@ -70,21 +72,42 @@ pub fn set_tasks_variable(exec_scopes: &mut ExecutionScopes) -> Result<(), HintE
 
     Ok(())
 }
+
+/// Implements
+/// %{ ids.num // 2 %}
+pub fn divide_num_by_2(
+    vm: &mut VirtualMachine,
+    ids_data: &HashMap<String, HintReference>,
+    ap_tracking: &ApTracking,
+) -> Result<(), HintError> {
+    let felt = get_integer_from_var_name("num", vm, ids_data, ap_tracking)?.into_owned();
+    // Unwrapping is safe in this context, 2 != 0
+    let two = NonZeroFelt::try_from(Felt252::from(2)).unwrap();
+    let felt_divided_by_2 = felt.floor_div(&two);
+
+    insert_value_into_ap(vm, Felt252::from(felt_divided_by_2))?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use num_traits::ToPrimitive;
     use std::collections::HashMap;
 
+    use crate::Felt252;
     use rstest::{fixture, rstest};
 
     use crate::hint_processor::builtin_hint_processor::bootloader::simple_bootloader_hints::{
-        prepare_task_range_checks, set_tasks_variable,
+        divide_num_by_2, prepare_task_range_checks, set_tasks_variable,
     };
     use crate::hint_processor::builtin_hint_processor::bootloader::types::{
         FactTopology, SimpleBootloaderInput, Task,
     };
     use crate::hint_processor::builtin_hint_processor::bootloader::vars;
-    use crate::hint_processor::builtin_hint_processor::hint_utils::get_ptr_from_var_name;
+    use crate::hint_processor::builtin_hint_processor::hint_utils::{
+        get_ptr_from_var_name, insert_value_from_var_name,
+    };
     use crate::hint_processor::hint_processor_definition::HintReference;
     use crate::serde::deserialize_program::ApTracking;
     use crate::types::exec_scope::ExecutionScopes;
@@ -165,5 +188,32 @@ mod tests {
             .get(vars::TASKS)
             .expect("Tasks variable is not set");
         assert_eq!(tasks, bootloader_tasks);
+    }
+
+    #[rstest]
+    #[case(128u128, 64u128)]
+    #[case(1001u128, 500u128)]
+    fn test_divide_num_by_2(#[case] num: u128, #[case] expected: u128) {
+        let num_felt = Felt252::from(num);
+        let expected_num_felt = Felt252::from(expected);
+
+        let mut vm = vm!();
+        add_segments!(vm, 2);
+        vm.run_context.ap = 1;
+        vm.run_context.fp = 1;
+
+        let ids_data = ids_data!["num"];
+        let ap_tracking = ApTracking::new();
+
+        insert_value_from_var_name("num", num_felt, &mut vm, &ids_data, &ap_tracking).unwrap();
+
+        divide_num_by_2(&mut vm, &ids_data, &ap_tracking).expect("Hint failed unexpectedly");
+
+        let divided_num = vm
+            .segments
+            .memory
+            .get_integer(vm.run_context.get_ap())
+            .unwrap();
+        assert_eq!(divided_num.into_owned(), expected_num_felt);
     }
 }
