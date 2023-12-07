@@ -332,6 +332,31 @@ pub fn guess_pre_image_of_subtasks_output_hash(
     Ok(())
 }
 
+/*
+Implements hint:
+%{
+    # Sanity check.
+    assert ids.program_address == program_address"
+%}
+*/
+pub fn assert_program_address(
+    vm: &mut VirtualMachine,
+    exec_scopes: &mut ExecutionScopes,
+    ids_data: &HashMap<String, HintReference>,
+    ap_tracking: &ApTracking,
+) -> Result<(), HintError> {
+    let ids_program_address =
+        get_ptr_from_var_name(vars::PROGRAM_ADDRESS, vm, ids_data, ap_tracking)?;
+    let program_address: Relocatable = exec_scopes.get(vars::PROGRAM_ADDRESS)?;
+
+    if ids_program_address != program_address {
+        return Err(HintError::CustomHint(
+            "program address is incorrect".to_string().into_boxed_str(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
@@ -829,5 +854,58 @@ mod tests {
         let composite_packed_output = PackedOutput::Composite(Vec::<Felt252>::new());
         exec_scopes.insert_value(vars::PACKED_OUTPUT, composite_packed_output);
         assert!(assert_is_composite_packed_output(&mut exec_scopes).is_ok());
+    }
+
+    #[rstest]
+    #[case(false)]
+    #[case(true)]
+    fn test_assert_program_address(#[case] expect_fail: bool) {
+        let mut vm = vm!();
+
+        add_segments!(vm, 2);
+        vm.run_context.fp = 2;
+
+        let ids_data = ids_data!(vars::PROGRAM_ADDRESS);
+        let ap_tracking = ApTracking::new();
+
+        let mut ptr = Relocatable {
+            segment_index: 42,
+            offset: 42,
+        };
+        let _ = insert_value_from_var_name(
+            vars::PROGRAM_ADDRESS,
+            ptr.clone(),
+            &mut vm,
+            &ids_data,
+            &ap_tracking,
+        )
+        .map_err(|e| panic!("could not insert var: {}", e));
+
+        if expect_fail {
+            ptr = Relocatable {
+                segment_index: 1,
+                offset: 1,
+            };
+        }
+
+        let mut exec_scopes = ExecutionScopes::new();
+        exec_scopes.insert_box(vars::PROGRAM_ADDRESS, any_box!(ptr));
+
+        let result = run_hint!(
+            vm,
+            ids_data.clone(),
+            hint_code::EXECUTE_TASK_ASSERT_PROGRAM_ADDRESS,
+            &mut exec_scopes
+        );
+
+        match result {
+            Ok(_) => assert!(!expect_fail),
+            Err(HintError::CustomHint(e)) => {
+                assert!(expect_fail);
+                assert_eq!(e.as_ref(), "program address is incorrect");
+                ()
+            }
+            _ => panic!("result not recognized"),
+        }
     }
 }
