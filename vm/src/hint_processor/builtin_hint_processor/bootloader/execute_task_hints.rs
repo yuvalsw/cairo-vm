@@ -128,35 +128,52 @@ pub fn call_task(
     _ap_tracking: &ApTracking,
 ) -> Result<(), HintError> {
 
-    let _task: Task = exec_scopes.get(vars::TASK)?;
-
     // assert isinstance(task, Task)
+    let task: Task = exec_scopes.get(vars::TASK)?;
 
-    Ok(())
+    // n_builtins = len(task.get_program().builtins)
+    let _num_builtins = task.get_program().builtins.len();
 
+    // TODO:
+    // new_task_locals = {}
+
+    match task {
+        // if isinstance(task, RunProgramTask):
+        Task::RunProgramTask => {
+
+            // new_task_locals['program_input'] = task.program_input
+            // new_task_locals['WITH_BOOTLOADER'] = True
+
+            // vm_load_program(task.program, program_address)
+        },
+        // elif isinstance(task, CairoPieTask):
+        Task::CairoPieTask => {
+            // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
+            // load_cairo_pie(
+            //     task=task.cairo_pie, memory=memory, segments=segments,
+            //     program_address=program_address, execution_segment_address= ap - n_builtins,
+            //     builtin_runners=builtin_runners, ret_fp=fp, ret_pc=ret_pc)
+
+        }
+        // else:
+        #[allow(unreachable_patterns)]
+        _ => {
+            // raise NotImplementedError(f'Unexpected task type: {type(task).__name__}.')
+            // TODO: proper error
+            return Err(HintError::WrongHintData);
+        }
+    }
+
+    // TODO:
     /*
-    n_builtins = len(task.get_program().builtins)
-    new_task_locals = {}
-    if isinstance(task, RunProgramTask):
-        new_task_locals['program_input'] = task.program_input
-        new_task_locals['WITH_BOOTLOADER'] = True
-
-        vm_load_program(task.program, program_address)
-    elif isinstance(task, CairoPieTask):
-        ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
-        load_cairo_pie(
-            task=task.cairo_pie, memory=memory, segments=segments,
-            program_address=program_address, execution_segment_address= ap - n_builtins,
-            builtin_runners=builtin_runners, ret_fp=fp, ret_pc=ret_pc)
-    else:
-        raise NotImplementedError(f'Unexpected task type: {type(task).__name__}.')
-
     output_runner_data = prepare_output_runner(
         task=task,
         output_builtin=output_builtin,
         output_ptr=ids.pre_execution_builtin_ptrs.output)
     vm_enter_scope(new_task_locals)"
     */
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -219,7 +236,7 @@ mod tests {
         let ids_data = HashMap::<String, HintReference>::new();
         let mut exec_scopes = ExecutionScopes::new();
 
-        let task = Task {};
+        let task = Task::RunProgramTask;
         exec_scopes.insert_box(vars::TASK, Box::new(task));
 
         assert_matches!(

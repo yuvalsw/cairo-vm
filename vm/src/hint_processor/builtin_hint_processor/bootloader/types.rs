@@ -26,7 +26,10 @@ impl PackedOutput {
 pub struct FactTopology {}
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
-pub struct Task {}
+pub enum Task {
+    RunProgramTask,
+    CairoPieTask,
+}
 
 impl Task {
     pub fn get_program(&self) -> Program {
