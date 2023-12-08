@@ -27,7 +27,7 @@ pub struct FactTopology {}
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub enum Task {
-    RunProgramTask,
+    RunProgramTask(String), // TODO: need definition for RunProgramTask, at least its "program_input"
     CairoPieTask,
 }
 

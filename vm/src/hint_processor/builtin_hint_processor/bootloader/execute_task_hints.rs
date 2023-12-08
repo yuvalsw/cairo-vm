@@ -13,6 +13,7 @@ use crate::serde::deserialize_program::ApTracking;
 use crate::types::exec_scope::ExecutionScopes;
 use crate::vm::errors::hint_errors::HintError;
 use crate::vm::vm_core::VirtualMachine;
+use crate::any_box;
 
 /// Implements %{ ids.program_data_ptr = program_data_base = segments.add() %}.
 ///
@@ -134,15 +135,16 @@ pub fn call_task(
     // n_builtins = len(task.get_program().builtins)
     let _num_builtins = task.get_program().builtins.len();
 
-    // TODO:
-    // new_task_locals = {}
+    let mut new_task_locals = HashMap::new();
 
     match task {
         // if isinstance(task, RunProgramTask):
-        Task::RunProgramTask => {
+        Task::RunProgramTask(program_input) => {
 
             // new_task_locals['program_input'] = task.program_input
+            new_task_locals.insert("program_input".to_string(), any_box![program_input]);
             // new_task_locals['WITH_BOOTLOADER'] = True
+            new_task_locals.insert("WITH_BOOTLOADER".to_string(), any_box![true]);
 
             // vm_load_program(task.program, program_address)
         },
@@ -170,8 +172,9 @@ pub fn call_task(
         task=task,
         output_builtin=output_builtin,
         output_ptr=ids.pre_execution_builtin_ptrs.output)
-    vm_enter_scope(new_task_locals)"
     */
+
+    exec_scopes.enter_scope(new_task_locals);
 
     Ok(())
 }
@@ -236,7 +239,7 @@ mod tests {
         let ids_data = HashMap::<String, HintReference>::new();
         let mut exec_scopes = ExecutionScopes::new();
 
-        let task = Task::RunProgramTask;
+        let task = Task::RunProgramTask("fixme".to_string());
         exec_scopes.insert_box(vars::TASK, Box::new(task));
 
         assert_matches!(
