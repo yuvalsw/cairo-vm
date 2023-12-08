@@ -169,14 +169,7 @@ mod tests {
         SimpleBootloaderInput {
             fact_topologies_path: None,
             single_page: false,
-            tasks: vec![
-                TaskSpec {
-                    task: Task::Program(fibonacci.clone()),
-                },
-                TaskSpec {
-                    task: Task::Program(fibonacci.clone()),
-                },
-            ],
+            tasks: vec![Task::RunProgramTask, Task::CairoPieTask],
         }
     }
 
