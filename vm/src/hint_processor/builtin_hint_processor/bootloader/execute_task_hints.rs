@@ -31,6 +31,7 @@ fn get_program_from_task(task: &Task) -> Result<StrippedProgram, HintError> {
         .map_err(|e| HintError::CustomHint(e.to_string().into_boxed_str()))
 }
 use crate::any_box;
+use crate::vm::runners::cairo_pie::CairoPie;
 
 /// Implements %{ ids.program_data_ptr = program_data_base = segments.add() %}.
 ///
@@ -403,7 +404,7 @@ pub fn call_task(
             // vm_load_program(task.program, program_address)
         },
         // elif isinstance(task, CairoPieTask):
-        Task::CairoPieTask => {
+        Task::CairoPieTask(_pie) => {
             // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
             // load_cairo_pie(
             //     task=task.cairo_pie, memory=memory, segments=segments,
@@ -431,6 +432,28 @@ pub fn call_task(
     exec_scopes.enter_scope(new_task_locals);
 
     Ok(())
+}
+
+mod util { // TODO: clean up / organize
+    use super::*;
+
+    pub(crate) fn load_cairo_pie(
+        _task: &CairoPie,
+        _memory: (),
+        _segments: (),
+        _program_address: (),
+        _execution_segment_address: (),
+        _builtin_runners: (),
+        _ret_fp: (),
+        _ret_pc: (),
+    ) {
+        // Load memory entries of the inner program.
+        // This replaces executing hints in a non-trusted program.
+
+
+
+
+    }
 }
 
 #[cfg(test)]

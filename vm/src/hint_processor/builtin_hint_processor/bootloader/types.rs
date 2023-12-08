@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use serde::{de, Deserialize, Deserializer};
 
+use crate::{types::program::Program, vm::runners::cairo_pie::CairoPie};
 use felt::Felt252;
 
 use crate::serde::deserialize_program::deserialize_and_parse_program;
@@ -82,14 +83,14 @@ impl TaskSpec {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SimpleBootloaderInput {
     pub fact_topologies_path: Option<PathBuf>,
     pub single_page: bool,
     pub tasks: Vec<TaskSpec>,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BootloaderInput {
     pub simple_bootloader_input: SimpleBootloaderInput,
     pub bootloader_config: BootloaderConfig,
