@@ -410,7 +410,7 @@ pub fn call_task(
 
         }
         // else:
-        #[allow(unreachable_patterns)]
+        #[allow(unreachable_patterns)] // TODO: we probably don't need this match arm, it makes it look similar to the original hint code though
         _ => {
             // raise NotImplementedError(f'Unexpected task type: {type(task).__name__}.')
             // TODO: proper error
