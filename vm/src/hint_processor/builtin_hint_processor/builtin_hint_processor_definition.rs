@@ -2,8 +2,8 @@ use felt::Felt252;
 
 use crate::hint_processor::builtin_hint_processor::bootloader::bootloader_hints::compute_and_configure_fact_topologies;
 use crate::hint_processor::builtin_hint_processor::bootloader::execute_task_hints::{
-    allocate_program_data_segment, append_fact_topologies, load_program_hint, validate_hash,
-    write_return_builtins_hint,
+    allocate_program_data_segment, append_fact_topologies, call_task, load_program_hint,
+    validate_hash, write_return_builtins_hint,
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::inner_select_builtins::select_builtin;
 use crate::hint_processor::builtin_hint_processor::bootloader::select_builtins::select_builtins_enter_scope;
@@ -905,6 +905,9 @@ impl HintProcessorLogic for BuiltinHintProcessor {
             }
             hint_code::EXECUTE_TASK_ASSERT_PROGRAM_ADDRESS => {
                 assert_program_address(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::EXECUTE_TASK_CALL_TASK => {
+                call_task(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
             }
             hint_code::EXECUTE_TASK_WRITE_RETURN_BUILTINS => write_return_builtins_hint(
                 vm,

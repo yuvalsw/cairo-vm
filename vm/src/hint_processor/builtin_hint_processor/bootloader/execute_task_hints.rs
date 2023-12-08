@@ -338,17 +338,99 @@ pub fn write_return_builtins_hint(
     Ok(())
 }
 
+/*
+Implements hint:
+%{
+    "from starkware.cairo.bootloaders.simple_bootloader.objects import (
+        CairoPieTask,
+        RunProgramTask,
+        Task,
+    )
+    from starkware.cairo.bootloaders.simple_bootloader.utils import (
+        load_cairo_pie,
+        prepare_output_runner,
+    )
+
+    assert isinstance(task, Task)
+    n_builtins = len(task.get_program().builtins)
+    new_task_locals = {}
+    if isinstance(task, RunProgramTask):
+        new_task_locals['program_input'] = task.program_input
+        new_task_locals['WITH_BOOTLOADER'] = True
+
+        vm_load_program(task.program, program_address)
+    elif isinstance(task, CairoPieTask):
+        ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
+        load_cairo_pie(
+            task=task.cairo_pie, memory=memory, segments=segments,
+            program_address=program_address, execution_segment_address= ap - n_builtins,
+            builtin_runners=builtin_runners, ret_fp=fp, ret_pc=ret_pc)
+    else:
+        raise NotImplementedError(f'Unexpected task type: {type(task).__name__}.')
+
+    output_runner_data = prepare_output_runner(
+        task=task,
+        output_builtin=output_builtin,
+        output_ptr=ids.pre_execution_builtin_ptrs.output)
+    vm_enter_scope(new_task_locals)"
+%}
+*/
+pub fn call_task(
+    _vm: &mut VirtualMachine,
+    exec_scopes: &mut ExecutionScopes,
+    _ids_data: &HashMap<String, HintReference>,
+    _ap_tracking: &ApTracking,
+) -> Result<(), HintError> {
+
+    let _task: Task = exec_scopes.get(vars::TASK)?;
+
+    // assert isinstance(task, Task)
+
+    Ok(())
+
+    /*
+    n_builtins = len(task.get_program().builtins)
+    new_task_locals = {}
+    if isinstance(task, RunProgramTask):
+        new_task_locals['program_input'] = task.program_input
+        new_task_locals['WITH_BOOTLOADER'] = True
+
+        vm_load_program(task.program, program_address)
+    elif isinstance(task, CairoPieTask):
+        ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
+        load_cairo_pie(
+            task=task.cairo_pie, memory=memory, segments=segments,
+            program_address=program_address, execution_segment_address= ap - n_builtins,
+            builtin_runners=builtin_runners, ret_fp=fp, ret_pc=ret_pc)
+    else:
+        raise NotImplementedError(f'Unexpected task type: {type(task).__name__}.')
+
+    output_runner_data = prepare_output_runner(
+        task=task,
+        output_builtin=output_builtin,
+        output_ptr=ids.pre_execution_builtin_ptrs.output)
+    vm_enter_scope(new_task_locals)"
+    */
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
 
     use felt::Felt252;
+    use rstest::rstest;
+    use assert_matches::assert_matches;
 
+    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
+    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData;
+    use crate::hint_processor::builtin_hint_processor::hint_code;
     use crate::hint_processor::builtin_hint_processor::hint_utils::get_ptr_from_var_name;
+    use crate::hint_processor::hint_processor_definition::HintProcessorLogic;
     use crate::types::relocatable::Relocatable;
     use crate::utils::test_utils::*;
     use crate::vm::runners::builtin_runner::{BuiltinRunner, OutputBuiltinRunner};
     use crate::vm::runners::cairo_pie::{BuiltinAdditionalData, PublicMemoryPage};
+    use crate::any_box;
 
     use super::*;
 
@@ -583,5 +665,25 @@ mod tests {
             .get(vars::N_SELECTED_BUILTINS)
             .expect("n_selected_builtins should be set");
         assert_eq!(n_selected_builtins, n_builtins);
+    }
+
+    #[test]
+    fn test_call_task() {
+        let mut vm = vm!();
+        let ids_data = HashMap::<String, HintReference>::new();
+        let mut exec_scopes = ExecutionScopes::new();
+
+        let task = Task {};
+        exec_scopes.insert_box(vars::TASK, Box::new(task));
+
+        assert_matches!(
+            run_hint!(
+                vm,
+                ids_data.clone(),
+                hint_code::EXECUTE_TASK_CALL_TASK,
+                &mut exec_scopes
+            ),
+            Ok(())
+        );
     }
 }
