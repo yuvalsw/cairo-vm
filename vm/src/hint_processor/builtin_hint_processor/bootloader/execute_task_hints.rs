@@ -1,4 +1,9 @@
 use std::any::Any;
+use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::compute_program_hash_chain;
+use crate::hint_processor::builtin_hint_processor::bootloader::types::Task;
+use crate::types::relocatable::Relocatable;
+use felt::Felt252;
+use starknet_crypto::FieldElement;
 use std::collections::HashMap;
 
 use num_traits::ToPrimitive;
@@ -32,6 +37,8 @@ fn get_program_from_task(task: &Task) -> Result<StrippedProgram, HintError> {
 }
 use crate::any_box;
 use crate::vm::runners::cairo_pie::CairoPie;
+
+use self::util::load_cairo_pie;
 
 /// Implements %{ ids.program_data_ptr = program_data_base = segments.add() %}.
 ///
@@ -378,7 +385,7 @@ Implements hint:
 %}
 */
 pub fn call_task(
-    _vm: &mut VirtualMachine,
+    vm: &mut VirtualMachine,
     exec_scopes: &mut ExecutionScopes,
     _ids_data: &HashMap<String, HintReference>,
     _ap_tracking: &ApTracking,
@@ -404,12 +411,26 @@ pub fn call_task(
             // vm_load_program(task.program, program_address)
         },
         // elif isinstance(task, CairoPieTask):
-        Task::CairoPieTask(_pie) => {
+        Task::CairoPieTask(task) => {
+            let program_address: Relocatable = exec_scopes.get("program_address")?;
+            
+            // TODO:
+            let fixme = Relocatable { segment_index: 0, offset: 0 };
+
             // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
             // load_cairo_pie(
             //     task=task.cairo_pie, memory=memory, segments=segments,
             //     program_address=program_address, execution_segment_address= ap - n_builtins,
             //     builtin_runners=builtin_runners, ret_fp=fp, ret_pc=ret_pc)
+            load_cairo_pie(
+                &task,
+                vm,
+                &task.memory, // TODO: almost definitely the wrong idea here
+                program_address,
+                fixme,
+                fixme,
+                fixme,
+            );
 
         }
         // else:
@@ -434,25 +455,51 @@ pub fn call_task(
     Ok(())
 }
 
-mod util { // TODO: clean up / organize
+mod util { use crate::{types::relocatable::MaybeRelocatable, vm::runners::cairo_pie::CairoPieMemory};
+
+// TODO: clean up / organize
     use super::*;
 
     pub(crate) fn load_cairo_pie(
-        _task: &CairoPie,
-        _memory: (),
-        _segments: (),
-        _program_address: (),
-        _execution_segment_address: (),
-        _builtin_runners: (),
-        _ret_fp: (),
-        _ret_pc: (),
-    ) {
+        task: &CairoPie,
+        vm: &mut VirtualMachine,
+        memory: &CairoPieMemory, // TODO: probably the wrong idea here
+        // _segments: (),
+        program_address: Relocatable,
+        execution_segment_address: Relocatable,
+        // _builtin_runners: (),
+        ret_fp: Relocatable,
+        ret_pc: Relocatable,
+    ) -> Result<(), HintError> {
         // Load memory entries of the inner program.
         // This replaces executing hints in a non-trusted program.
+        let mut segment_offsets = HashMap::new();
+        segment_offsets.insert(task.metadata.program_segment.index, program_address);
+        segment_offsets.insert(task.metadata.execution_segment.index,  execution_segment_address);
+        segment_offsets.insert(task.metadata.ret_fp_segment.index, ret_fp);
+        segment_offsets.insert(task.metadata.ret_pc_segment.index, ret_pc);
 
+        // Returns the segment index for the given value.
+        // Verifies that value is a RelocatableValue with offset 0.
+        let extract_segment = |value, _value_name| -> Result<isize, HintError> {
+            return match value {
+                MaybeRelocatable::RelocatableValue(r) if r.offset != 0 => Err(HintError::WrongHintData), // TODO: error
+                MaybeRelocatable::RelocatableValue(r) if r.offset == 0 => Ok(r.segment_index),
+                _ => Err(HintError::WrongHintData) // TODO: error
+            }
+        };
 
+        let origin_execution_segment = Relocatable { segment_index: task.metadata.execution_segment.index, offset: 0 };
 
+        // Set initial stack relocations.
+        let mut offset = 0;
+        for builtin in task.metadata.program.builtins.iter() {
+            let index = extract_segment(task.memory[origin_execution_segment + offset], "fixme_builtin_name_here")?;
+            segment_offsets.insert(index, memory[index as usize]); // TODO: should be Relocatable, also TODO: type conversion
+            offset += 1;
+        }
 
+        Ok(())
     }
 }
 
