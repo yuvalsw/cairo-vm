@@ -1,4 +1,4 @@
-use crate::types::program::Program;
+use crate::{types::program::Program, vm::runners::cairo_pie::CairoPie};
 use felt::Felt252;
 use serde::Deserialize;
 use std::path::Path;
@@ -25,10 +25,10 @@ impl PackedOutput {
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct FactTopology {}
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Task {
     RunProgramTask(String), // TODO: need definition for RunProgramTask, at least its "program_input"
-    CairoPieTask,
+    CairoPieTask(CairoPie),
 }
 
 impl Task {
@@ -38,14 +38,14 @@ impl Task {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SimpleBootloaderInput {
     pub fact_topologies_path: Option<String>,
     pub single_page: bool,
     pub tasks: Vec<Task>,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BootloaderInput {
     pub simple_bootloader_input: SimpleBootloaderInput,
     pub bootloader_config: BootloaderConfig,
