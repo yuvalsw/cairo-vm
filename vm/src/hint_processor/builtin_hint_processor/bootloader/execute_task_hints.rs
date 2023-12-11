@@ -519,7 +519,12 @@ mod util { use crate::{types::relocatable::{MaybeRelocatable, relocate_value}, v
             offset += 1;
         }
 
-        // TODO: process "extra_segments"
+        for segment_info in task.metadata.extra_segments {
+            let index = segment_info.index as usize;
+            assert!(index < RELOCATABLE_TABLE_SIZE);
+            // TODO: previous passed 'size' to add()
+            segment_offsets[index] = vm.add_memory_segment().segment_index as usize;
+        }
 
         let local_relocate_value = |value| {
             return relocate_value(value, &segment_offsets);
