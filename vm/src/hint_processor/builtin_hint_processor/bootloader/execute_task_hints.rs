@@ -264,7 +264,7 @@ mod util { use crate::{types::relocatable::{MaybeRelocatable, relocate_value}, v
             idx += 1;
         }
 
-        for segment_info in task.metadata.extra_segments {
+        for segment_info in &task.metadata.extra_segments {
             let index = segment_info.index as usize;
             assert!(index < RELOCATABLE_TABLE_SIZE);
             // TODO: previous passed 'size' to add()
@@ -277,7 +277,7 @@ mod util { use crate::{types::relocatable::{MaybeRelocatable, relocate_value}, v
 
         // TODO: process ecdsa builtin
 
-        for item in task.memory {
+        for item in &task.memory {
             // TODO: relocate memory, perhaps using Memory's relocation table (add_relocation_rule() calls) 
             //       and then call relocate_memory()?
         }
