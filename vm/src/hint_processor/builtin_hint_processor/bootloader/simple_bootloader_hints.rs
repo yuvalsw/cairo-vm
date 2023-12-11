@@ -169,7 +169,10 @@ mod tests {
         SimpleBootloaderInput {
             fact_topologies_path: None,
             single_page: false,
-            tasks: vec![Task::RunProgramTask(Default::default()), Task::RunProgramTask(Default::default())],
+            tasks: vec![
+                Task::RunProgramTask(Default::default()),
+                Task::RunProgramTask(Default::default()),
+            ],
         }
     }
 
