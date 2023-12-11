@@ -395,7 +395,7 @@ pub fn call_task(
     let task: Task = exec_scopes.get(vars::TASK)?;
 
     // n_builtins = len(task.get_program().builtins)
-    let _num_builtins = task.get_program().builtins.len();
+    let num_builtins = task.get_program().builtins.len();
 
     let mut new_task_locals = HashMap::new();
 
@@ -427,7 +427,7 @@ pub fn call_task(
                 vm,
                 &task.memory, // TODO: almost definitely the wrong idea here
                 program_address,
-                fixme,
+                vm.get_ap().segment_index as usize - num_builtins,
                 fixme,
                 fixme,
             );
@@ -455,7 +455,7 @@ pub fn call_task(
     Ok(())
 }
 
-mod util { use crate::{types::relocatable::MaybeRelocatable, vm::runners::cairo_pie::CairoPieMemory};
+mod util { use crate::{types::relocatable::{MaybeRelocatable, relocate_value}, vm::runners::cairo_pie::CairoPieMemory};
 
 // TODO: clean up / organize
     use super::*;
@@ -463,21 +463,24 @@ mod util { use crate::{types::relocatable::MaybeRelocatable, vm::runners::cairo_
     pub(crate) fn load_cairo_pie(
         task: &CairoPie,
         vm: &mut VirtualMachine,
-        memory: &CairoPieMemory, // TODO: probably the wrong idea here
+        mem ory: &CairoPieMemory, // TODO: probably the wrong idea here
         // _segments: (),
         program_address: Relocatable,
-        execution_segment_address: Relocatable,
+        execution_segment_address: usize,
         // _builtin_runners: (),
         ret_fp: Relocatable,
         ret_pc: Relocatable,
     ) -> Result<(), HintError> {
         // Load memory entries of the inner program.
         // This replaces executing hints in a non-trusted program.
-        let mut segment_offsets = HashMap::new();
-        segment_offsets.insert(task.metadata.program_segment.index, program_address);
-        segment_offsets.insert(task.metadata.execution_segment.index,  execution_segment_address);
-        segment_offsets.insert(task.metadata.ret_fp_segment.index, ret_fp);
-        segment_offsets.insert(task.metadata.ret_pc_segment.index, ret_pc);
+        // TODO: review: the original type was `WriteOnceDict`, which works quite differently than a Vec.
+        //       we use a fixed size here to prevent unbounded vec size.
+        const RELOCATABLE_TABLE_SIZE: usize = 256;
+        let mut segment_offsets = vec![0usize; RELOCATABLE_TABLE_SIZE];
+        segment_offsets[task.metadata.program_segment.index as usize] = program_address.segment_index as usize;
+        segment_offsets[task.metadata.execution_segment.index as usize] =  execution_segment_address;
+        segment_offsets[task.metadata.ret_fp_segment.index as usize] = ret_fp.segment_index as usize;
+        segment_offsets[task.metadata.ret_pc_segment.index as usize] = ret_pc.segment_index as usize;
 
         // Returns the segment index for the given value.
         // Verifies that value is a RelocatableValue with offset 0.
@@ -494,10 +497,41 @@ mod util { use crate::{types::relocatable::MaybeRelocatable, vm::runners::cairo_
         // Set initial stack relocations.
         let mut offset = 0;
         for builtin in task.metadata.program.builtins.iter() {
-            let index = extract_segment(task.memory[origin_execution_segment + offset], "fixme_builtin_name_here")?;
-            segment_offsets.insert(index, memory[index as usize]); // TODO: should be Relocatable, also TODO: type conversion
+            // task.memory is a CairoPieMemory, aka Vec<((usize, usize), MaybeRelocatable)>
+            // Assumptions:
+            //     * the (usize, usize) is a (segment_index, offset) pair
+            //     * the Vec's order and packing is arbitrary, so we scan for matches
+            let key: Relocatable = (origin_execution_segment + offset)?;
+            // TODO: review clone() here (into_iter() takes ownership)
+            let pie_mem_element = task.memory.clone().into_iter().find_map(|entry| {
+                return if entry.0 == (key.segment_index as usize, key.offset) {
+                    Some(entry.1)
+                } else {
+                    None
+                }
+            }).ok_or(HintError::EmptyKeys)?; // TODO: proper error
+
+            let index = extract_segment(pie_mem_element, builtin)? as usize;
+            assert!(index < RELOCATABLE_TABLE_SIZE);
+
+            // TODO:
+            // segment_offsets.insert(index, vm.get_relocatable(execution_segment_address + offset)?.segment_index as usize); // TODO: should be Relocatable, also TODO: type conversion
             offset += 1;
         }
+
+        // TODO: process "extra_segments"
+
+        let local_relocate_value = |value| {
+            return relocate_value(value, &segment_offsets);
+        };
+
+        // TODO: process ecdsa builtin
+
+        for item in task.memory {
+            // TODO: relocate memory, perhaps using Memory's relocation table (add_relocation_rule() calls) 
+            //       and then call relocate_memory()?
+        }
+
 
         Ok(())
     }
