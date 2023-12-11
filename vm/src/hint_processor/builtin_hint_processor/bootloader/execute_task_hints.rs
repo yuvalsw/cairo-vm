@@ -5,6 +5,7 @@ use felt::Felt252;
 use starknet_crypto::FieldElement;
 use std::collections::HashMap;
 
+use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::vars;
 use crate::hint_processor::builtin_hint_processor::hint_utils::{
     get_ptr_from_var_name, insert_value_from_var_name,
@@ -13,9 +14,8 @@ use crate::hint_processor::hint_processor_definition::HintReference;
 use crate::serde::deserialize_program::ApTracking;
 use crate::types::exec_scope::ExecutionScopes;
 use crate::vm::errors::hint_errors::HintError;
-use crate::vm::vm_core::VirtualMachine;
-use crate::any_box;
 use crate::vm::runners::cairo_pie::CairoPie;
+use crate::vm::vm_core::VirtualMachine;
 
 use self::util::load_cairo_pie;
 
@@ -132,7 +132,6 @@ pub fn call_task(
     _ids_data: &HashMap<String, HintReference>,
     _ap_tracking: &ApTracking,
 ) -> Result<(), HintError> {
-
     // assert isinstance(task, Task)
     let task: Task = exec_scopes.get(vars::TASK)?;
 
@@ -144,20 +143,22 @@ pub fn call_task(
     match task {
         // if isinstance(task, RunProgramTask):
         Task::RunProgramTask(program_input) => {
-
             // new_task_locals['program_input'] = task.program_input
             new_task_locals.insert("program_input".to_string(), any_box![program_input]);
             // new_task_locals['WITH_BOOTLOADER'] = True
             new_task_locals.insert("WITH_BOOTLOADER".to_string(), any_box![true]);
 
             // vm_load_program(task.program, program_address)
-        },
+        }
         // elif isinstance(task, CairoPieTask):
         Task::CairoPieTask(task) => {
             let program_address: Relocatable = exec_scopes.get("program_address")?;
-            
+
             // TODO:
-            let fixme = Relocatable { segment_index: 0, offset: 0 };
+            let fixme = Relocatable {
+                segment_index: 0,
+                offset: 0,
+            };
 
             // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
             // load_cairo_pie(
@@ -172,10 +173,10 @@ pub fn call_task(
                 fixme,
                 fixme,
             )?;
-
         }
         // else:
-        #[allow(unreachable_patterns)] // TODO: we probably don't need this match arm, it makes it look similar to the original hint code though
+        #[allow(unreachable_patterns)]
+        // TODO: we probably don't need this match arm, it makes it look similar to the original hint code though
         _ => {
             // raise NotImplementedError(f'Unexpected task type: {type(task).__name__}.')
             // TODO: proper error
@@ -197,7 +198,7 @@ pub fn call_task(
 }
 
 mod util {
-    use crate::types::relocatable::{MaybeRelocatable, relocate_value};
+    use crate::types::relocatable::{relocate_value, MaybeRelocatable};
 
     // TODO: clean up / organize
     use super::*;
@@ -218,22 +219,30 @@ mod util {
         //       we use a fixed size here to prevent unbounded vec size.
         const RELOCATABLE_TABLE_SIZE: usize = 256;
         let mut segment_offsets = vec![0usize; RELOCATABLE_TABLE_SIZE];
-        segment_offsets[task.metadata.program_segment.index as usize] = program_address.segment_index as usize;
-        segment_offsets[task.metadata.execution_segment.index as usize] =  execution_segment_address;
-        segment_offsets[task.metadata.ret_fp_segment.index as usize] = ret_fp.segment_index as usize;
-        segment_offsets[task.metadata.ret_pc_segment.index as usize] = ret_pc.segment_index as usize;
+        segment_offsets[task.metadata.program_segment.index as usize] =
+            program_address.segment_index as usize;
+        segment_offsets[task.metadata.execution_segment.index as usize] = execution_segment_address;
+        segment_offsets[task.metadata.ret_fp_segment.index as usize] =
+            ret_fp.segment_index as usize;
+        segment_offsets[task.metadata.ret_pc_segment.index as usize] =
+            ret_pc.segment_index as usize;
 
         // Returns the segment index for the given value.
         // Verifies that value is a RelocatableValue with offset 0.
         let extract_segment = |value, _value_name| -> Result<isize, HintError> {
             return match value {
-                MaybeRelocatable::RelocatableValue(r) if r.offset != 0 => Err(HintError::WrongHintData), // TODO: error
+                MaybeRelocatable::RelocatableValue(r) if r.offset != 0 => {
+                    Err(HintError::WrongHintData)
+                } // TODO: error
                 MaybeRelocatable::RelocatableValue(r) if r.offset == 0 => Ok(r.segment_index),
-                _ => Err(HintError::WrongHintData) // TODO: error
-            }
+                _ => Err(HintError::WrongHintData), // TODO: error
+            };
         };
 
-        let origin_execution_segment = Relocatable { segment_index: task.metadata.execution_segment.index, offset: 0 };
+        let origin_execution_segment = Relocatable {
+            segment_index: task.metadata.execution_segment.index,
+            offset: 0,
+        };
 
         // Set initial stack relocations.
         let mut idx = 0;
@@ -244,20 +253,25 @@ mod util {
             //     * the Vec's order and packing is arbitrary, so we scan for matches
             let key: Relocatable = (origin_execution_segment + idx)?;
             // TODO: review clone() here (into_iter() takes ownership)
-            let pie_mem_element = task.memory.clone().into_iter().find_map(|entry| {
-                return if entry.0 == (key.segment_index as usize, key.offset) {
-                    Some(entry.1)
-                } else {
-                    None
-                }
-            }).ok_or(HintError::EmptyKeys)?; // TODO: proper error
+            let pie_mem_element = task
+                .memory
+                .clone()
+                .into_iter()
+                .find_map(|entry| {
+                    return if entry.0 == (key.segment_index as usize, key.offset) {
+                        Some(entry.1)
+                    } else {
+                        None
+                    };
+                })
+                .ok_or(HintError::EmptyKeys)?; // TODO: proper error
 
             let index = extract_segment(pie_mem_element, builtin)? as usize;
             assert!(index < RELOCATABLE_TABLE_SIZE);
 
             let mem_at = Relocatable {
                 segment_index: (execution_segment_address + idx) as isize,
-                offset: 0
+                offset: 0,
             };
             segment_offsets.insert(index, vm.get_relocatable(mem_at)?.segment_index as usize); // TODO: should be Relocatable, also TODO: type conversion
             idx += 1;
@@ -277,10 +291,9 @@ mod util {
         // TODO: process ecdsa builtin
 
         for _item in &task.memory {
-            // TODO: relocate memory, perhaps using Memory's relocation table (add_relocation_rule() calls) 
+            // TODO: relocate memory, perhaps using Memory's relocation table (add_relocation_rule() calls)
             //       and then call relocate_memory()?
         }
-
 
         Ok(())
     }
@@ -288,9 +301,10 @@ mod util {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
     use assert_matches::assert_matches;
+    use rstest::rstest;
 
+    use crate::any_box;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData;
     use crate::hint_processor::builtin_hint_processor::hint_code;
@@ -298,7 +312,6 @@ mod tests {
     use crate::hint_processor::hint_processor_definition::HintProcessorLogic;
     use crate::types::relocatable::Relocatable;
     use crate::utils::test_utils::*;
-    use crate::any_box;
 
     use super::*;
 

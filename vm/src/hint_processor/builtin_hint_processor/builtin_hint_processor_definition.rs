@@ -28,7 +28,7 @@ use super::{
     },
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::execute_task_hints::{
-    allocate_program_data_segment, validate_hash, call_task,
+    allocate_program_data_segment, call_task, validate_hash,
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::simple_bootloader_hints::{
     divide_num_by_2, prepare_task_range_checks, set_ap_to_zero, set_tasks_variable,
