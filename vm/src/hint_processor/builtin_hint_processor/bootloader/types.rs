@@ -28,6 +28,7 @@ pub struct FactTopology {}
 #[derive(Debug, Clone, PartialEq)]
 pub enum Task {
     RunProgramTask(String), // TODO: need definition for RunProgramTask, at least its "program_input"
+    #[allow(dead_code)] // TODO: remove when CairoPieTask is constructed (and compiler is happy)
     CairoPieTask(CairoPie),
 }
 
