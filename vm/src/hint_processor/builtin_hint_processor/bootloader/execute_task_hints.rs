@@ -425,12 +425,11 @@ pub fn call_task(
             load_cairo_pie(
                 &task,
                 vm,
-                &task.memory, // TODO: almost definitely the wrong idea here
                 program_address,
                 vm.get_ap().segment_index as usize - num_builtins,
                 fixme,
                 fixme,
-            );
+            )?;
 
         }
         // else:
@@ -455,15 +454,15 @@ pub fn call_task(
     Ok(())
 }
 
-mod util { use crate::{types::relocatable::{MaybeRelocatable, relocate_value}, vm::runners::cairo_pie::CairoPieMemory};
+mod util {
+    use crate::types::relocatable::{MaybeRelocatable, relocate_value};
 
-// TODO: clean up / organize
+    // TODO: clean up / organize
     use super::*;
 
     pub(crate) fn load_cairo_pie(
         task: &CairoPie,
         vm: &mut VirtualMachine,
-        memory: &CairoPieMemory, // TODO: probably the wrong idea here
         // _segments: (),
         program_address: Relocatable,
         execution_segment_address: usize,
@@ -529,13 +528,13 @@ mod util { use crate::{types::relocatable::{MaybeRelocatable, relocate_value}, v
             segment_offsets[index] = vm.add_memory_segment().segment_index as usize;
         }
 
-        let local_relocate_value = |value| {
+        let _local_relocate_value = |value| {
             return relocate_value(value, &segment_offsets);
         };
 
         // TODO: process ecdsa builtin
 
-        for item in &task.memory {
+        for _item in &task.memory {
             // TODO: relocate memory, perhaps using Memory's relocation table (add_relocation_rule() calls) 
             //       and then call relocate_memory()?
         }
