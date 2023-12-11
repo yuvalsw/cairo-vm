@@ -205,7 +205,7 @@ mod util { use crate::{types::relocatable::{MaybeRelocatable, relocate_value}, v
     pub(crate) fn load_cairo_pie(
         task: &CairoPie,
         vm: &mut VirtualMachine,
-        mem ory: &CairoPieMemory, // TODO: probably the wrong idea here
+        memory: &CairoPieMemory, // TODO: probably the wrong idea here
         // _segments: (),
         program_address: Relocatable,
         execution_segment_address: usize,
@@ -237,13 +237,13 @@ mod util { use crate::{types::relocatable::{MaybeRelocatable, relocate_value}, v
         let origin_execution_segment = Relocatable { segment_index: task.metadata.execution_segment.index, offset: 0 };
 
         // Set initial stack relocations.
-        let mut offset = 0;
+        let mut idx = 0;
         for builtin in task.metadata.program.builtins.iter() {
             // task.memory is a CairoPieMemory, aka Vec<((usize, usize), MaybeRelocatable)>
             // Assumptions:
             //     * the (usize, usize) is a (segment_index, offset) pair
             //     * the Vec's order and packing is arbitrary, so we scan for matches
-            let key: Relocatable = (origin_execution_segment + offset)?;
+            let key: Relocatable = (origin_execution_segment + idx)?;
             // TODO: review clone() here (into_iter() takes ownership)
             let pie_mem_element = task.memory.clone().into_iter().find_map(|entry| {
                 return if entry.0 == (key.segment_index as usize, key.offset) {
@@ -256,9 +256,12 @@ mod util { use crate::{types::relocatable::{MaybeRelocatable, relocate_value}, v
             let index = extract_segment(pie_mem_element, builtin)? as usize;
             assert!(index < RELOCATABLE_TABLE_SIZE);
 
-            // TODO:
-            // segment_offsets.insert(index, vm.get_relocatable(execution_segment_address + offset)?.segment_index as usize); // TODO: should be Relocatable, also TODO: type conversion
-            offset += 1;
+            let mem_at = Relocatable {
+                segment_index: (execution_segment_address + idx) as isize,
+                offset: 0
+            };
+            segment_offsets.insert(index, vm.get_relocatable(mem_at)?.segment_index as usize); // TODO: should be Relocatable, also TODO: type conversion
+            idx += 1;
         }
 
         for segment_info in task.metadata.extra_segments {
