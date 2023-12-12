@@ -510,14 +510,12 @@ mod util {
             //     * the (usize, usize) is a (segment_index, offset) pair
             //     * the Vec's order and packing is arbitrary, so we scan for matches
             let key: Relocatable = (origin_execution_segment + idx)?;
-            // TODO: review clone() here (into_iter() takes ownership)
             let pie_mem_element = task
                 .memory
-                .clone()
-                .into_iter()
+                .iter()
                 .find_map(|entry| {
                     return if entry.0 == (key.segment_index as usize, key.offset) {
-                        Some(entry.1)
+                        Some(entry.1.clone())
                     } else {
                         None
                     };
