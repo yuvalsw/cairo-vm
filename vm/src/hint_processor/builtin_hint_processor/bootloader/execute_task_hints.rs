@@ -198,7 +198,7 @@ pub fn call_task(
 }
 
 mod util {
-    use crate::types::relocatable::{relocate_value, MaybeRelocatable};
+    use crate::{types::{relocatable::{relocate_value, MaybeRelocatable}, instance_definitions::ecdsa_instance_def}, vm::runners::builtin_runner::SIGNATURE_BUILTIN_NAME};
 
     // TODO: clean up / organize
     use super::*;
@@ -209,7 +209,6 @@ mod util {
         // _segments: (),
         program_address: Relocatable,
         execution_segment_address: usize,
-        // _builtin_runners: (),
         ret_fp: Relocatable,
         ret_pc: Relocatable,
     ) -> Result<(), HintError> {
@@ -273,7 +272,7 @@ mod util {
                 segment_index: (execution_segment_address + idx) as isize,
                 offset: 0,
             };
-            segment_offsets.insert(index, vm.get_relocatable(mem_at)?.segment_index as usize); // TODO: should be Relocatable, also TODO: type conversion
+            segment_offsets.insert(index, vm.get_relocatable(mem_at)?.segment_index as usize);
             idx += 1;
         }
 
@@ -288,7 +287,32 @@ mod util {
             return relocate_value(value, &segment_offsets);
         };
 
-        // TODO: process ecdsa builtin
+        // Relocate builtin additional data.
+        // This should occur before the memory relocation, since the signature builtin assumes that a
+        // signature is added before the corresponding public key and message are both written to memory.
+        let ecdsa_additional_data = task.additional_data.get("ecdsa_builtin");
+        if let Some(ecdsa_additional_data) = ecdsa_additional_data {
+            let ecdsa_builtin = vm.get_builtin_runners().iter().find(|builtin| {
+                builtin.name() == SIGNATURE_BUILTIN_NAME
+            }).ok_or(HintError::CustomHint("The task requires the ecdsa builtin but it is missing.".to_string().into_boxed_str()))?;
+            
+            // TODO:
+            // need equivalent of:
+            // ecdsa_builtin.extend_additional_data(esdsa_additional_data, local_relocate_value)
+            //
+            // which seems to be:
+            /*
+            def extend_additional_data(self, data, relocate_callback, data_is_trusted=True):
+            for addr, signature in data:
+            relocated_addr = relocate_callback(RelocatableValue.from_tuple(addr))
+            assert relocated_addr.segment_index == self.base.segment_index, (
+                f"Error while loading {self.name} builtin additional data: "
+                "Signature hint must point to the signature builtin segment. "
+                f"Found: {addr} (after relocation: {relocated_addr})."
+            )
+            self.signatures[relocated_addr] = signature
+            */
+        }
 
         for _item in &task.memory {
             // TODO: relocate memory, perhaps using Memory's relocation table (add_relocation_rule() calls)
