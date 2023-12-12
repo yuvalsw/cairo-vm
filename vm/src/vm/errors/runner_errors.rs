@@ -102,6 +102,8 @@ pub enum RunnerError {
     Trace(#[from] TraceError),
     #[error("EcOp builtin: Invalid Point")]
     InvalidPoint,
+    #[error("Page ({0}) is not on the expected segment {1}")]
+    PageNotOnSegment(Relocatable, usize),
 }
 
 #[cfg(test)]
