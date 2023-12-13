@@ -188,14 +188,11 @@ pub fn call_task(
     //     task=task,
     //     output_builtin=output_builtin,
     //     output_ptr=ids.pre_execution_builtin_ptrs.output)
-    let output_ptr: = get_ptr_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
+    let output_ptr =
+        get_ptr_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
     // TODO: ids.pre_execution_builtin_ptrs should be a BuiltinData, see bootloader impl in cairo-lang for reference;
     //       so how do we obtain a BuiltinData from ids?
-    let output_runner_data = prepare_output_runner(
-        task,
-        vm.get_output_builtin()?,
-        output_ptr,
-    )?;
+    let output_runner_data = prepare_output_runner(task, vm.get_output_builtin()?, output_ptr)?;
 
     exec_scopes.enter_scope(new_task_locals);
 
@@ -205,7 +202,18 @@ pub fn call_task(
 mod util {
     use num_traits::ToPrimitive;
 
-    use crate::{types::{relocatable::{MaybeRelocatable, relocate_address}, errors::math_errors::MathError}, vm::{runners::{builtin_runner::{SIGNATURE_BUILTIN_NAME, SignatureBuiltinRunner, BuiltinRunner, OutputBuiltinRunner}, cairo_pie::{BuiltinAdditionalData, OutputBuiltinAdditionalData}}}};
+    use crate::{
+        types::{
+            errors::math_errors::MathError,
+            relocatable::{relocate_address, MaybeRelocatable},
+        },
+        vm::runners::{
+            builtin_runner::{
+                BuiltinRunner, OutputBuiltinRunner, SignatureBuiltinRunner, SIGNATURE_BUILTIN_NAME,
+            },
+            cairo_pie::{BuiltinAdditionalData, OutputBuiltinAdditionalData},
+        },
+    };
 
     // TODO: clean up / organize
     use super::*;
@@ -293,14 +301,24 @@ mod util {
                 .map_err(|e| HintError::CustomHint(format!("Memory error: {}", e).into_boxed_str()))
         };
 
-        let extend_additional_data = |data: &HashMap<Relocatable, (Felt252, Felt252)>, builtin: &mut SignatureBuiltinRunner| -> Result<(), HintError> {
+        let extend_additional_data = |data: &HashMap<Relocatable, (Felt252, Felt252)>,
+                                      builtin: &mut SignatureBuiltinRunner|
+         -> Result<(), HintError> {
             for (addr, signature) in data {
                 let relocated_addr = local_relocate_value(*addr)?;
                 if relocated_addr != builtin.base() {
-                    return Err(HintError::CustomHint(format!("expected relocated addr ({}) to equal builtin ({})", relocated_addr, builtin.base()).into_boxed_str()));
+                    return Err(HintError::CustomHint(
+                        format!(
+                            "expected relocated addr ({}) to equal builtin ({})",
+                            relocated_addr,
+                            builtin.base()
+                        )
+                        .into_boxed_str(),
+                    ));
                 }
-                builtin.add_signature(*addr, signature)
-                    .map_err(|e| HintError::CustomHint(format!("Memory error: {}", e).into_boxed_str()))?;
+                builtin.add_signature(*addr, signature).map_err(|e| {
+                    HintError::CustomHint(format!("Memory error: {}", e).into_boxed_str())
+                })?;
             }
 
             Ok(())
@@ -311,22 +329,38 @@ mod util {
         // signature is added before the corresponding public key and message are both written to memory.
         let ecdsa_additional_data = task.additional_data.get("ecdsa_builtin");
         if let Some(ecdsa_additional_data) = ecdsa_additional_data {
-            let ecdsa_builtin = vm.get_builtin_runners_as_mut().iter_mut().find(|builtin: &&mut BuiltinRunner| {
-                builtin.name() == SIGNATURE_BUILTIN_NAME
-            }).ok_or(HintError::CustomHint("The task requires the ecdsa builtin but it is missing.".to_string().into_boxed_str()))?;
+            let ecdsa_builtin = vm
+                .get_builtin_runners_as_mut()
+                .iter_mut()
+                .find(|builtin: &&mut BuiltinRunner| builtin.name() == SIGNATURE_BUILTIN_NAME)
+                .ok_or(HintError::CustomHint(
+                    "The task requires the ecdsa builtin but it is missing."
+                        .to_string()
+                        .into_boxed_str(),
+                ))?;
 
-            let signature_additional_data = if let BuiltinAdditionalData::Signature(ecdsa_additional_data) = ecdsa_additional_data {
-                Ok(ecdsa_additional_data)
-            } else {
-                Err(HintError::CustomHint("ECDSA builtin data should be of type Signature".to_string().into_boxed_str()))
-            }?;
+            let signature_additional_data =
+                if let BuiltinAdditionalData::Signature(ecdsa_additional_data) =
+                    ecdsa_additional_data
+                {
+                    Ok(ecdsa_additional_data)
+                } else {
+                    Err(HintError::CustomHint(
+                        "ECDSA builtin data should be of type Signature"
+                            .to_string()
+                            .into_boxed_str(),
+                    ))
+                }?;
 
             match ecdsa_builtin {
-                BuiltinRunner::Signature(signature) => {
-                    Ok(extend_additional_data(signature_additional_data, signature)?)
-                },
+                BuiltinRunner::Signature(signature) => Ok(extend_additional_data(
+                    signature_additional_data,
+                    signature,
+                )?),
                 // TODO: better way to express this
-                _ => Err(HintError::CustomHint("Unreachable".to_string().into_boxed_str()))
+                _ => Err(HintError::CustomHint(
+                    "Unreachable".to_string().into_boxed_str(),
+                )),
             }?;
         }
 
@@ -343,24 +377,25 @@ mod util {
     /// If the type of task is CairoPie, nothing should be done, as the program does not contain
     /// hints that may affect the output builtin.
     /// The return value of this function should be later passed to get_task_fact_topology().
-    fn prepare_output_runner(task: &Task, output_builtin: &OutputBuiltinRunner, output_ptr: Felt252) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
-
+    fn prepare_output_runner(
+        task: &Task,
+        output_builtin: &OutputBuiltinRunner,
+        output_ptr: Felt252,
+    ) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
         match task {
             Task::RunProgramTask(_) => {
                 let output_state = output_builtin.get_additional_data();
                 output_builtin.base = output_ptr
                     .to_usize()
-                    .ok_or(MathError::Felt252ToUsizeConversion(Box::new(
-                        output_ptr,
-                    )))?;
+                    .ok_or(MathError::Felt252ToUsizeConversion(Box::new(output_ptr)))?;
                 Ok(Some(output_state))
-            },
+            }
             Task::CairoPieTask(_) => Ok(None),
-            _ => Err(HintError::CustomHint("Unreachable".to_string().into_boxed_str()))
+            _ => Err(HintError::CustomHint(
+                "Unreachable".to_string().into_boxed_str(),
+            )),
         }?;
-
     }
-
 }
 
 #[cfg(test)]
