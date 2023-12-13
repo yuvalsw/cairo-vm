@@ -195,7 +195,7 @@ pub fn call_task(
     //       so how do we obtain a BuiltinData from ids? Or do we just access its "output" var, which is its first?
     let output_runner_data = util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr.into())?;
 
-    exec_scopes.insert_box(vars::OUTPUT_RUNNER_DATA, output_runner_data);
+    exec_scopes.insert_box(vars::OUTPUT_RUNNER_DATA, any_box!(output_runner_data));
 
     exec_scopes.enter_scope(new_task_locals);
 
@@ -211,7 +211,7 @@ mod util {
             builtin_runner::{
                 BuiltinRunner, OutputBuiltinRunner, SignatureBuiltinRunner, SIGNATURE_BUILTIN_NAME,
             },
-            cairo_pie::BuiltinAdditionalData,
+            cairo_pie::{BuiltinAdditionalData, OutputBuiltinAdditionalData},
         },
     };
 
@@ -381,10 +381,13 @@ mod util {
         task: &Task,
         output_builtin: &mut OutputBuiltinRunner,
         output_ptr: Relocatable,
-    ) -> Result<Option<BuiltinAdditionalData>, HintError> {
+    ) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
         return match task {
             Task::RunProgramTask(_) => {
-                let output_state = output_builtin.get_additional_data();
+                let output_state = match output_builtin.get_additional_data() {
+                    BuiltinAdditionalData::Output(output_state) => Ok(output_state),
+                    _ => Err(HintError::CustomHint("output_builtin's additional data is not type Output".to_string().into_boxed_str())),
+                }?;
                 output_builtin.base = output_ptr.segment_index as usize;
                 Ok(Some(output_state))
             }
