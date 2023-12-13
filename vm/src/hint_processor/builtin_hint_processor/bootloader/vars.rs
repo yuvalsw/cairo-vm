@@ -42,3 +42,6 @@ pub(crate) const N_SELECTED_BUILTINS: &str = "n_selected_builtins";
 
 /// "pre_execution_builtin_ptrs"
 pub(crate) const PRE_EXECUTION_BUILTIN_PTRS: &str = "pre_execution_builtin_ptrs";
+
+/// "output_runner_data"
+pub(crate) const OUTPUT_RUNNER_DATA: &str = "output_runner_data";
