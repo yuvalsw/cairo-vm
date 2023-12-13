@@ -388,8 +388,8 @@ Implements hint:
 pub fn call_task(
     vm: &mut VirtualMachine,
     exec_scopes: &mut ExecutionScopes,
-    _ids_data: &HashMap<String, HintReference>,
-    _ap_tracking: &ApTracking,
+    ids_data: &HashMap<String, HintReference>,
+    ap_tracking: &ApTracking,
 ) -> Result<(), HintError> {
     // assert isinstance(task, Task)
     let task: Task = exec_scopes.get(vars::TASK)?;
@@ -443,13 +443,18 @@ pub fn call_task(
         }
     }
 
-    // TODO:
-    /*
-    output_runner_data = prepare_output_runner(
-        task=task,
-        output_builtin=output_builtin,
-        output_ptr=ids.pre_execution_builtin_ptrs.output)
-    */
+    // output_runner_data = prepare_output_runner(
+    //     task=task,
+    //     output_builtin=output_builtin,
+    //     output_ptr=ids.pre_execution_builtin_ptrs.output)
+    let output_ptr: = get_ptr_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
+    // TODO: ids.pre_execution_builtin_ptrs should be a BuiltinData, see bootloader impl in cairo-lang for reference;
+    //       so how do we obtain a BuiltinData from ids?
+    let output_runner_data = prepare_output_runner(
+        task,
+        vm.get_output_builtin()?,
+        output_ptr,
+    )?;
 
     exec_scopes.enter_scope(new_task_locals);
 
@@ -457,7 +462,9 @@ pub fn call_task(
 }
 
 mod util {
-    use crate::{types::{relocatable::{MaybeRelocatable, relocate_address}}, vm::{runners::{builtin_runner::{SIGNATURE_BUILTIN_NAME, SignatureBuiltinRunner, BuiltinRunner}, cairo_pie::BuiltinAdditionalData}}};
+    use num_traits::ToPrimitive;
+
+    use crate::{types::{relocatable::{MaybeRelocatable, relocate_address}, errors::math_errors::MathError}, vm::{runners::{builtin_runner::{SIGNATURE_BUILTIN_NAME, SignatureBuiltinRunner, BuiltinRunner, OutputBuiltinRunner}, cairo_pie::{BuiltinAdditionalData, OutputBuiltinAdditionalData}}}};
 
     // TODO: clean up / organize
     use super::*;
@@ -589,6 +596,30 @@ mod util {
 
         Ok(())
     }
+
+    /// Prepares the output builtin if the type of task is Task, so that pages of the inner program
+    /// will be recorded separately.
+    /// If the type of task is CairoPie, nothing should be done, as the program does not contain
+    /// hints that may affect the output builtin.
+    /// The return value of this function should be later passed to get_task_fact_topology().
+    fn prepare_output_runner(task: &Task, output_builtin: &OutputBuiltinRunner, output_ptr: Felt252) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
+
+        match task {
+            Task::RunProgramTask(_) => {
+                let output_state = output_builtin.get_additional_data();
+                output_builtin.base = output_ptr
+                    .to_usize()
+                    .ok_or(MathError::Felt252ToUsizeConversion(Box::new(
+                        output_ptr,
+                    )))?;
+                Ok(Some(output_state))
+            },
+            Task::CairoPieTask(_) => Ok(None),
+            _ => Err(HintError::CustomHint("Unreachable".to_string().into_boxed_str()))
+        }?;
+
+    }
+
 }
 
 #[cfg(test)]
