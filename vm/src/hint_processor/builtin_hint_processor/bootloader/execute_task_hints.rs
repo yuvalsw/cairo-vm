@@ -140,7 +140,8 @@ pub fn call_task(
 
     let mut new_task_locals = HashMap::new();
 
-    match task {
+    // TODO: remove clone here when RunProgramTask has proper variant data (not String)
+    match task.clone() {
         // if isinstance(task, RunProgramTask):
         Task::RunProgramTask(program_input) => {
             // new_task_locals['program_input'] = task.program_input
@@ -191,8 +192,10 @@ pub fn call_task(
     let output_ptr =
         get_ptr_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
     // TODO: ids.pre_execution_builtin_ptrs should be a BuiltinData, see bootloader impl in cairo-lang for reference;
-    //       so how do we obtain a BuiltinData from ids?
-    let output_runner_data = prepare_output_runner(task, vm.get_output_builtin()?, output_ptr)?;
+    //       so how do we obtain a BuiltinData from ids? Or do we just access its "output" var, which is its first?
+    let output_runner_data = util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr.into())?;
+
+    exec_scopes.insert_box(vars::OUTPUT_RUNNER_DATA, output_runner_data);
 
     exec_scopes.enter_scope(new_task_locals);
 
@@ -200,18 +203,15 @@ pub fn call_task(
 }
 
 mod util {
-    use num_traits::ToPrimitive;
-
     use crate::{
         types::{
-            errors::math_errors::MathError,
             relocatable::{relocate_address, MaybeRelocatable},
         },
         vm::runners::{
             builtin_runner::{
                 BuiltinRunner, OutputBuiltinRunner, SignatureBuiltinRunner, SIGNATURE_BUILTIN_NAME,
             },
-            cairo_pie::{BuiltinAdditionalData, OutputBuiltinAdditionalData},
+            cairo_pie::BuiltinAdditionalData,
         },
     };
 
@@ -377,24 +377,19 @@ mod util {
     /// If the type of task is CairoPie, nothing should be done, as the program does not contain
     /// hints that may affect the output builtin.
     /// The return value of this function should be later passed to get_task_fact_topology().
-    fn prepare_output_runner(
+    pub(crate) fn prepare_output_runner(
         task: &Task,
-        output_builtin: &OutputBuiltinRunner,
-        output_ptr: Felt252,
-    ) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
-        match task {
+        output_builtin: &mut OutputBuiltinRunner,
+        output_ptr: Relocatable,
+    ) -> Result<Option<BuiltinAdditionalData>, HintError> {
+        return match task {
             Task::RunProgramTask(_) => {
                 let output_state = output_builtin.get_additional_data();
-                output_builtin.base = output_ptr
-                    .to_usize()
-                    .ok_or(MathError::Felt252ToUsizeConversion(Box::new(output_ptr)))?;
+                output_builtin.base = output_ptr.segment_index as usize;
                 Ok(Some(output_state))
             }
             Task::CairoPieTask(_) => Ok(None),
-            _ => Err(HintError::CustomHint(
-                "Unreachable".to_string().into_boxed_str(),
-            )),
-        }?;
+        };
     }
 }
 
