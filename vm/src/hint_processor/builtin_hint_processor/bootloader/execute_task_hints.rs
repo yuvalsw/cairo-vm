@@ -193,7 +193,8 @@ pub fn call_task(
         get_ptr_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
     // TODO: ids.pre_execution_builtin_ptrs should be a BuiltinData, see bootloader impl in cairo-lang for reference;
     //       so how do we obtain a BuiltinData from ids? Or do we just access its "output" var, which is its first?
-    let output_runner_data = util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr.into())?;
+    let output_runner_data =
+        util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr.into())?;
 
     exec_scopes.insert_box(vars::OUTPUT_RUNNER_DATA, any_box!(output_runner_data));
 
@@ -204,9 +205,7 @@ pub fn call_task(
 
 mod util {
     use crate::{
-        types::{
-            relocatable::{relocate_address, MaybeRelocatable},
-        },
+        types::relocatable::{relocate_address, MaybeRelocatable},
         vm::runners::{
             builtin_runner::{
                 BuiltinRunner, OutputBuiltinRunner, SignatureBuiltinRunner, SIGNATURE_BUILTIN_NAME,
@@ -386,7 +385,11 @@ mod util {
             Task::RunProgramTask(_) => {
                 let output_state = match output_builtin.get_additional_data() {
                     BuiltinAdditionalData::Output(output_state) => Ok(output_state),
-                    _ => Err(HintError::CustomHint("output_builtin's additional data is not type Output".to_string().into_boxed_str())),
+                    _ => Err(HintError::CustomHint(
+                        "output_builtin's additional data is not type Output"
+                            .to_string()
+                            .into_boxed_str(),
+                    )),
                 }?;
                 output_builtin.base = output_ptr.segment_index as usize;
                 Ok(Some(output_state))
