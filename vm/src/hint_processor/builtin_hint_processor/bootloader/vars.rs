@@ -27,3 +27,6 @@ pub(crate) const PROGRAM_DATA_BASE: &str = "program_data_base";
 
 /// Address of current program.
 pub(crate) const PROGRAM_ADDRESS: &str = "program_address";
+
+/// "pre_execution_builtin_ptrs"
+pub(crate) const PRE_EXECUTION_BUILTIN_PTRS: &str = "pre_execution_builtin_ptrs";

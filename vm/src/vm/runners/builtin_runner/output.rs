@@ -11,7 +11,7 @@ use super::OUTPUT_BUILTIN_NAME;
 
 #[derive(Debug, Clone)]
 pub struct OutputBuiltinRunner {
-    base: usize,
+    pub(crate) base: usize,
     pub(crate) stop_ptr: Option<usize>,
     pub(crate) included: bool,
 }
