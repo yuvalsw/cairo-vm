@@ -198,7 +198,7 @@ pub fn call_task(
 }
 
 mod util {
-    use crate::{types::{relocatable::{relocate_value, MaybeRelocatable}, instance_definitions::ecdsa_instance_def}, vm::runners::builtin_runner::SIGNATURE_BUILTIN_NAME};
+    use crate::{types::{relocatable::{MaybeRelocatable, relocate_address}}, vm::{runners::{builtin_runner::{SIGNATURE_BUILTIN_NAME, SignatureBuiltinRunner, BuiltinRunner}, cairo_pie::BuiltinAdditionalData}}};
 
     // TODO: clean up / organize
     use super::*;
@@ -281,8 +281,22 @@ mod util {
             segment_offsets[index] = vm.add_memory_segment().segment_index as usize;
         }
 
-        let _local_relocate_value = |value| {
-            return relocate_value(value, &segment_offsets);
+        let local_relocate_value = |value| -> Result<usize, HintError> {
+            relocate_address(value, &segment_offsets)
+                .map_err(|e| HintError::CustomHint(format!("Memory error: {}", e).into_boxed_str()))
+        };
+
+        let extend_additional_data = |data: &HashMap<Relocatable, (Felt252, Felt252)>, builtin: &mut SignatureBuiltinRunner| -> Result<(), HintError> {
+            for (addr, signature) in data {
+                let relocated_addr = local_relocate_value(*addr)?;
+                if relocated_addr != builtin.base() {
+                    return Err(HintError::CustomHint(format!("expected relocated addr ({}) to equal builtin ({})", relocated_addr, builtin.base()).into_boxed_str()));
+                }
+                builtin.add_signature(*addr, signature)
+                    .map_err(|e| HintError::CustomHint(format!("Memory error: {}", e).into_boxed_str()))?;
+            }
+
+            Ok(())
         };
 
         // Relocate builtin additional data.
@@ -290,26 +304,23 @@ mod util {
         // signature is added before the corresponding public key and message are both written to memory.
         let ecdsa_additional_data = task.additional_data.get("ecdsa_builtin");
         if let Some(ecdsa_additional_data) = ecdsa_additional_data {
-            let ecdsa_builtin = vm.get_builtin_runners().iter().find(|builtin| {
+            let ecdsa_builtin = vm.get_builtin_runners_as_mut().iter_mut().find(|builtin: &&mut BuiltinRunner| {
                 builtin.name() == SIGNATURE_BUILTIN_NAME
             }).ok_or(HintError::CustomHint("The task requires the ecdsa builtin but it is missing.".to_string().into_boxed_str()))?;
-            
-            // TODO:
-            // need equivalent of:
-            // ecdsa_builtin.extend_additional_data(esdsa_additional_data, local_relocate_value)
-            //
-            // which seems to be:
-            /*
-            def extend_additional_data(self, data, relocate_callback, data_is_trusted=True):
-            for addr, signature in data:
-            relocated_addr = relocate_callback(RelocatableValue.from_tuple(addr))
-            assert relocated_addr.segment_index == self.base.segment_index, (
-                f"Error while loading {self.name} builtin additional data: "
-                "Signature hint must point to the signature builtin segment. "
-                f"Found: {addr} (after relocation: {relocated_addr})."
-            )
-            self.signatures[relocated_addr] = signature
-            */
+
+            let signature_additional_data = if let BuiltinAdditionalData::Signature(ecdsa_additional_data) = ecdsa_additional_data {
+                Ok(ecdsa_additional_data)
+            } else {
+                Err(HintError::CustomHint("ECDSA builtin data should be of type Signature".to_string().into_boxed_str()))
+            }?;
+
+            match ecdsa_builtin {
+                BuiltinRunner::Signature(signature) => {
+                    Ok(extend_additional_data(signature_additional_data, signature)?)
+                },
+                // TODO: better way to express this
+                _ => Err(HintError::CustomHint("Unreachable".to_string().into_boxed_str()))
+            }?;
         }
 
         for _item in &task.memory {
