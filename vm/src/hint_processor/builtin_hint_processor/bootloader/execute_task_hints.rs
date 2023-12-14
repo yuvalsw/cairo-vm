@@ -17,9 +17,11 @@ use crate::hint_processor::builtin_hint_processor::bootloader::fact_topologies::
     get_program_task_fact_topology, FactTopology,
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::compute_program_hash_chain;
+use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::program_loader::ProgramLoader;
 use crate::hint_processor::builtin_hint_processor::bootloader::types::{BootloaderVersion, Task};
 use crate::any_box;
+use crate::hint_processor::builtin_hint_processor::bootloader::vars;
 use crate::hint_processor::builtin_hint_processor::bootloader::vars;
 use crate::hint_processor::builtin_hint_processor::hint_utils::{
     get_ptr_from_var_name, get_relocatable_from_var_name, insert_value_from_var_name,
