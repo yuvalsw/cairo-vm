@@ -7,7 +7,6 @@ use felt::Felt252;
 
 use crate::serde::deserialize_program::deserialize_and_parse_program;
 use crate::types::errors::program_errors::ProgramError;
-use crate::types::program::Program;
 use crate::vm::runners::cairo_pie::{CairoPie, StrippedProgram};
 
 pub type BootloaderVersion = u64;
