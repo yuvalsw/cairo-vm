@@ -1,5 +1,4 @@
 use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::compute_program_hash_chain;
-use crate::hint_processor::builtin_hint_processor::bootloader::types::Task;
 use crate::types::errors::math_errors::MathError;
 use crate::types::relocatable::Relocatable;
 use felt::Felt252;
@@ -11,14 +10,12 @@ use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::program_loader::ProgramLoader;
 use crate::hint_processor::builtin_hint_processor::bootloader::types::{BootloaderVersion, Task};
 use crate::hint_processor::builtin_hint_processor::bootloader::vars;
-use crate::hint_processor::builtin_hint_processor::bootloader::vars;
 use crate::hint_processor::builtin_hint_processor::hint_utils::{
     get_ptr_from_var_name, get_relocatable_from_var_name, insert_value_from_var_name,
 };
 use crate::hint_processor::hint_processor_definition::HintReference;
 use crate::serde::deserialize_program::ApTracking;
 use crate::types::exec_scope::ExecutionScopes;
-use crate::types::relocatable::Relocatable;
 use crate::vm::errors::hint_errors::HintError;
 use crate::vm::runners::cairo_pie::CairoPie;
 use crate::vm::vm_core::VirtualMachine;

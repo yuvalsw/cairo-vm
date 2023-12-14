@@ -29,7 +29,7 @@ use super::{
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::bootloader_hints::compute_and_configure_fact_topologies;
 use crate::hint_processor::builtin_hint_processor::bootloader::execute_task_hints::{
-    allocate_program_data_segment, allocate_program_data_segment, call_task, load_program_hint,
+    allocate_program_data_segment, call_task, load_program_hint,
     validate_hash,
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::simple_bootloader_hints::{

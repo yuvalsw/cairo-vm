@@ -1,14 +1,10 @@
 use crate::{types::program::Program, vm::runners::cairo_pie::CairoPie};
 use felt::Felt252;
-use serde::Deserialize;
 use serde::{de, Deserialize, Deserializer};
-use std::path::Path;
 
-use felt::Felt252;
 use std::path::PathBuf;
 
 use crate::serde::deserialize_program::deserialize_and_parse_program;
-use crate::types::program::Program;
 
 pub type BootloaderVersion = u64;
 
@@ -45,17 +41,17 @@ where
     deserialize_and_parse_program(obj_raw.as_bytes(), Some("main")).map_err(de::Error::custom)
 }
 
-impl Task {
-    pub fn get_program(&self) -> &Program {
-        &self.program
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Task {
     RunProgramTask(String), // TODO: need definition for RunProgramTask, at least its "program_input"
     #[allow(dead_code)] // TODO: remove when CairoPieTask is constructed (and compiler is happy)
     CairoPieTask(CairoPie),
+}
+
+impl Task {
+    pub fn get_program(&self) -> &Program {
+        &self.program
+    }
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -66,13 +62,6 @@ pub struct TaskSpec {
 impl TaskSpec {
     pub fn load_task(&self) -> &Task {
         &self.task
-    }
-}
-
-impl Task {
-    pub fn get_program(&self) -> Program {
-        // TODO: implement this method correctly
-        Program::from_file(Path::new("../cairo_programs/fibonacci.json"), Some("main")).unwrap()
     }
 }
 
