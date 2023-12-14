@@ -458,9 +458,7 @@ pub fn call_task(
         .into_owned();
     let output_ptr = output
         .to_usize()
-        .ok_or(MathError::Felt252ToUsizeConversion(Box::new(
-            output,
-        )))?;
+        .ok_or(MathError::Felt252ToUsizeConversion(Box::new(output)))?;
     let output_runner_data =
         util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr)?;
 
@@ -931,10 +929,7 @@ mod tests {
         vm.run_context.fp = 8;
         add_segments!(vm, 1);
 
-
-        let ids_data = non_continuous_ids_data![
-            (vars::PRE_EXECUTION_BUILTIN_PTRS, -8)
-        ];
+        let ids_data = non_continuous_ids_data![(vars::PRE_EXECUTION_BUILTIN_PTRS, -8)];
 
         let mut exec_scopes = ExecutionScopes::new();
 
