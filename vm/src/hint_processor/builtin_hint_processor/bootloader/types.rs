@@ -1,7 +1,8 @@
+use std::path::PathBuf;
+
 use serde::{de, Deserialize, Deserializer};
 
 use felt::Felt252;
-use std::path::PathBuf;
 
 use crate::serde::deserialize_program::deserialize_and_parse_program;
 use crate::types::program::Program;
