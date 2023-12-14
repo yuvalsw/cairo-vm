@@ -8,17 +8,10 @@ use std::collections::HashMap;
 
 use crate::any_box;
 use std::any::Any;
-use std::collections::HashMap;
-
-use num_traits::ToPrimitive;
-use starknet_crypto::FieldElement;
-
-use felt::Felt252;
 
 use crate::hint_processor::builtin_hint_processor::bootloader::fact_topologies::{
     get_program_task_fact_topology, FactTopology,
 };
-use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::compute_program_hash_chain;
 use crate::hint_processor::builtin_hint_processor::bootloader::program_loader::ProgramLoader;
 use crate::hint_processor::builtin_hint_processor::bootloader::types::{BootloaderVersion, Task};
 use crate::hint_processor::builtin_hint_processor::bootloader::vars;
@@ -27,7 +20,6 @@ use crate::hint_processor::builtin_hint_processor::hint_utils::{
 };
 use crate::hint_processor::hint_processor_definition::HintReference;
 use crate::serde::deserialize_program::{ApTracking, BuiltinName};
-use crate::types::errors::math_errors::MathError;
 use crate::types::exec_scope::ExecutionScopes;
 use crate::vm::errors::hint_errors::HintError;
 use crate::vm::runners::cairo_pie::CairoPie;
@@ -70,47 +62,6 @@ fn field_element_to_felt(field_element: FieldElement) -> Felt252 {
 }
 
 /// Implements
-/// # Validate hash.
-/// from starkware.cairo.bootloaders.hash_program import compute_program_hash_chain
-///
-/// assert memory[ids.output_ptr + 1] == compute_program_hash_chain(task.get_program()), \
-///   'Computed hash does not match input.'";
-pub fn validate_hash(
-    vm: &mut VirtualMachine,
-    exec_scopes: &mut ExecutionScopes,
-    ids_data: &HashMap<String, HintReference>,
-    ap_tracking: &ApTracking,
-) -> Result<(), HintError> {
-    let task: Task = exec_scopes.get(vars::TASK)?;
-    let program = task.get_program();
-
-    let output_ptr = get_ptr_from_var_name("output_ptr", vm, ids_data, ap_tracking)?;
-    let program_hash_ptr = (output_ptr + 1)?;
-
-    let program_hash = vm
-        .segments
-        .memory
-        .get_integer(program_hash_ptr)?
-        .into_owned();
-
-    // Compute the hash of the program
-    let computed_program_hash = compute_program_hash_chain(program, 0)
-        .map_err(|e| {
-            HintError::CustomHint(format!("Could not compute program hash: {e}").into_boxed_str())
-        })?
-        .into();
-    let computed_program_hash = field_element_to_felt(computed_program_hash);
-
-    if program_hash != computed_program_hash {
-        return Err(HintError::AssertionFailed(
-            "Computed hash does not match input"
-                .to_string()
-                .into_boxed_str(),
-        ));
-    }
-}
-
-/// Implements
 ///
 /// from starkware.cairo.bootloaders.simple_bootloader.utils import load_program
 ///
@@ -148,11 +99,6 @@ pub fn load_program_hint(
     exec_scopes.insert_value(vars::PROGRAM_ADDRESS, loaded_program.code_address);
 
     Ok(())
-}
-
-fn field_element_to_felt(field_element: FieldElement) -> Felt252 {
-    let bytes = field_element.to_bytes_be();
-    Felt252::from_bytes_be(&bytes)
 }
 
 /*
@@ -202,14 +148,14 @@ pub fn call_task(
     let task: Task = exec_scopes.get(vars::TASK)?;
 
     // n_builtins = len(task.get_program().builtins)
-    let num_builtins = task.get_program().builtins.len();
+    let num_builtins = get_program_from_task(&task)?.builtins.len();
 
     let mut new_task_locals = HashMap::new();
 
     // TODO: remove clone here when RunProgramTask has proper variant data (not String)
     match task.clone() {
         // if isinstance(task, RunProgramTask):
-        Task::RunProgramTask(program_input) => {
+        Task::Program(program_input) => {
             // new_task_locals['program_input'] = task.program_input
             new_task_locals.insert("program_input".to_string(), any_box![program_input]);
             // new_task_locals['WITH_BOOTLOADER'] = True
@@ -219,7 +165,7 @@ pub fn call_task(
             // vm_load_program(task.program, program_address)
         }
         // elif isinstance(task, CairoPieTask):
-        Task::CairoPieTask(task) => {
+        Task::Pie(task) => {
             let program_address: Relocatable = exec_scopes.get("program_address")?;
 
             // TODO:
@@ -504,7 +450,7 @@ mod util {
         output_ptr: usize,
     ) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
         return match task {
-            Task::RunProgramTask(_) => {
+            Task::Program(_) => {
                 let output_state = match output_builtin.get_additional_data() {
                     BuiltinAdditionalData::Output(output_state) => Ok(output_state),
                     _ => Err(HintError::CustomHint(
@@ -516,7 +462,7 @@ mod util {
                 output_builtin.base = output_ptr;
                 Ok(Some(output_state))
             }
-            Task::CairoPieTask(_) => Ok(None),
+            Task::Pie(_) => Ok(None),
         };
     }
 }
@@ -783,8 +729,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_call_task() {
+    #[rstest]
+    fn test_call_task(fibonacci: Program) {
         let mut vm = vm!();
 
         // Allocate space for pre-execution (8 felts), which mimics the `BuiltinData` struct in the
@@ -797,7 +743,7 @@ mod tests {
 
         let mut exec_scopes = ExecutionScopes::new();
 
-        let task = Task::RunProgramTask("fixme".to_string());
+        let task = Task::Program(fibonacci);
         exec_scopes.insert_box(vars::TASK, Box::new(task));
 
         assert_matches!(

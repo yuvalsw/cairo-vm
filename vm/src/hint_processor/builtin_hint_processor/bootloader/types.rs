@@ -1,19 +1,12 @@
-use crate::{types::program::Program, vm::runners::cairo_pie::CairoPie};
 use felt::Felt252;
 use serde::{de, Deserialize, Deserializer};
 
 use std::path::PathBuf;
 
 use crate::serde::deserialize_program::deserialize_and_parse_program;
-use std::path::PathBuf;
 
-use serde::{de, Deserialize, Deserializer};
-
-use felt::Felt252;
-
-use crate::serde::deserialize_program::deserialize_and_parse_program;
 use crate::types::errors::program_errors::ProgramError;
-use crate::types::program::Program;
+use crate::utils::test_utils::Program;
 use crate::vm::runners::cairo_pie::{CairoPie, StrippedProgram};
 
 pub type BootloaderVersion = u64;
@@ -51,13 +44,6 @@ where
 {
     let obj_raw: &str = Deserialize::deserialize(deserializer)?;
     deserialize_and_parse_program(obj_raw.as_bytes(), Some("main")).map_err(de::Error::custom)
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Task {
-    RunProgramTask(String), // TODO: need definition for RunProgramTask, at least its "program_input"
-    #[allow(dead_code)] // TODO: remove when CairoPieTask is constructed (and compiler is happy)
-    CairoPieTask(CairoPie),
 }
 
 impl Task {

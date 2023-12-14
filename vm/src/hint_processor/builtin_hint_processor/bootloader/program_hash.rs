@@ -3,8 +3,6 @@ use starknet_crypto::{pedersen_hash, FieldElement};
 use felt::Felt252;
 
 use crate::serde::deserialize_program::BuiltinName;
-use crate::types::program::Program;
-use crate::types::relocatable::MaybeRelocatable;
 use crate::types::relocatable::MaybeRelocatable;
 use crate::vm::runners::cairo_pie::StrippedProgram;
 

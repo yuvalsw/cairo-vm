@@ -895,9 +895,6 @@ impl HintProcessorLogic for BuiltinHintProcessor {
                 &hint_data.ids_data,
                 &hint_data.ap_tracking,
             ),
-            hint_code::EXECUTE_TASK_VALIDATE_HASH => {
-                validate_hash(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
-            }
             hint_code::EXECUTE_TASK_LOAD_PROGRAM => {
                 load_program_hint(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
             }
