@@ -412,12 +412,6 @@ pub fn call_task(
         Task::Pie(task) => {
             let program_address: Relocatable = exec_scopes.get("program_address")?;
 
-            // TODO:
-            let fixme = Relocatable {
-                segment_index: 0,
-                offset: 0,
-            };
-
             // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
             // load_cairo_pie(
             //     task=task.cairo_pie, memory=memory, segments=segments,
@@ -428,8 +422,8 @@ pub fn call_task(
                 vm,
                 program_address,
                 vm.get_ap().segment_index as usize - num_builtins,
-                fixme,
-                fixme,
+                vm.get_fp(),
+                vm.get_pc(),
             )?;
         }
         // else:
@@ -789,6 +783,11 @@ mod tests {
         let ids_data = non_continuous_ids_data![(vars::PRE_EXECUTION_BUILTIN_PTRS, -8)];
 
         let mut exec_scopes = ExecutionScopes::new();
+
+        let mut output_builtin = OutputBuiltinRunner::new(true);
+        output_builtin.initialize_segments(&mut vm.segments);
+        vm.builtin_runners
+            .push(BuiltinRunner::Output(output_builtin));
 
         let task = Task::Program(fibonacci);
         exec_scopes.insert_box(vars::TASK, Box::new(task));
