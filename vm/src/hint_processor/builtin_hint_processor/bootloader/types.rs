@@ -5,6 +5,16 @@ use serde::{de, Deserialize, Deserializer};
 use std::path::PathBuf;
 
 use crate::serde::deserialize_program::deserialize_and_parse_program;
+use std::path::PathBuf;
+
+use serde::{de, Deserialize, Deserializer};
+
+use felt::Felt252;
+
+use crate::serde::deserialize_program::deserialize_and_parse_program;
+use crate::types::errors::program_errors::ProgramError;
+use crate::types::program::Program;
+use crate::vm::runners::cairo_pie::{CairoPie, StrippedProgram};
 
 pub type BootloaderVersion = u64;
 
@@ -28,9 +38,11 @@ impl PackedOutput {
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
-pub struct Task {
+#[serde(untagged)]
+pub enum Task {
     #[serde(deserialize_with = "deserialize_program")]
-    pub program: Program,
+    Program(Program),
+    Pie(CairoPie),
 }
 
 fn deserialize_program<'de, D>(deserializer: D) -> Result<Program, D::Error>
@@ -49,8 +61,13 @@ pub enum Task {
 }
 
 impl Task {
-    pub fn get_program(&self) -> &Program {
-        &self.program
+    pub fn get_program(&self) -> Result<StrippedProgram, ProgramError> {
+        // TODO: consider whether declaring a struct similar to StrippedProgram
+        //       but that uses a reference to data to avoid copying is worth the effort.
+        match self {
+            Task::Program(program) => program.get_stripped_program(),
+            Task::Pie(cairo_pie) => Ok(cairo_pie.metadata.program.clone()),
+        }
     }
 }
 

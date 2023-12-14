@@ -5,6 +5,8 @@ use felt::Felt252;
 use crate::serde::deserialize_program::BuiltinName;
 use crate::types::program::Program;
 use crate::types::relocatable::MaybeRelocatable;
+use crate::types::relocatable::MaybeRelocatable;
+use crate::vm::runners::cairo_pie::StrippedProgram;
 
 type HashFunction = fn(&FieldElement, &FieldElement) -> FieldElement;
 
@@ -18,9 +20,6 @@ pub enum HashChainError {
 pub enum ProgramHashError {
     #[error(transparent)]
     HashChain(#[from] HashChainError),
-
-    #[error("The program does not specify a main function")]
-    NoEntrypoint,
 
     #[error(
         "Invalid program builtin: builtin name too long to be converted to field element: {0}"
@@ -92,8 +91,7 @@ fn maybe_relocatable_to_field_element(
     felt_to_field_element(felt)
 }
 
-#[allow(dead_code)] // TODO: remove
-/// Computes the hash of a program.
+/// Computes the Pedersen hash of a program.
 ///
 /// Reimplements this Python function:
 /// def compute_program_hash_chain(program: ProgramBase, bootloader_version=0):
@@ -104,13 +102,10 @@ fn maybe_relocatable_to_field_element(
 ///  
 ///     return compute_hash_chain([len(data_chain)] + data_chain)
 pub fn compute_program_hash_chain(
-    program: Program,
+    program: &StrippedProgram,
     bootloader_version: usize,
 ) -> Result<FieldElement, ProgramHashError> {
-    let program_main = program
-        .shared_program_data
-        .main
-        .ok_or(ProgramHashError::NoEntrypoint)?;
+    let program_main = program.main;
     let program_main = FieldElement::from(program_main);
 
     // Convert builtin names to field elements
@@ -128,7 +123,6 @@ pub fn compute_program_hash_chain(
     ];
 
     let program_data: Result<Vec<_>, _> = program
-        .shared_program_data
         .data
         .iter()
         .map(maybe_relocatable_to_field_element)
@@ -154,6 +148,7 @@ pub fn compute_program_hash_chain(
 mod tests {
     use std::path::PathBuf;
 
+    use crate::types::program::Program;
     use rstest::rstest;
     use starknet_crypto::pedersen_hash;
 
@@ -197,9 +192,10 @@ mod tests {
         let program =
             Program::from_file(program_path.as_path(), Some("main"))
                 .expect("Could not load program. Did you compile the sample programs? Run `make test` in the root directory.");
+        let stripped_program = program.get_stripped_program().unwrap();
         let bootloader_version = 0;
 
-        let program_hash = compute_program_hash_chain(program, bootloader_version)
+        let program_hash = compute_program_hash_chain(&stripped_program, bootloader_version)
             .expect("Failed to compute program hash.");
 
         let program_hash_hex = format!("{:#x}", program_hash);

@@ -34,5 +34,12 @@ pub(crate) const PROGRAM_ADDRESS: &str = "program_address";
 /// "pre_execution_builtin_ptrs"
 pub(crate) const PRE_EXECUTION_BUILTIN_PTRS: &str = "pre_execution_builtin_ptrs";
 
-/// "output_runner_data"
+/// Output builtin additional data.
 pub(crate) const OUTPUT_RUNNER_DATA: &str = "output_runner_data";
+
+/// Number of builtins used by the program.
+pub(crate) const N_BUILTINS: &str = "n_builtins";
+
+/// Number of selected builtins for the current program.
+pub(crate) const N_SELECTED_BUILTINS: &str = "n_selected_builtins";
+
