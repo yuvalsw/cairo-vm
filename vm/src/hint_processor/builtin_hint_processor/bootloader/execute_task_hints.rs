@@ -451,26 +451,16 @@ pub fn call_task(
     //     task=task,
     //     output_builtin=output_builtin,
     //     output_ptr=ids.pre_execution_builtin_ptrs.output)
-    /*
-    let output =
-        get_integer_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?
-        .into_owned();
-    */
-
     let pre_execution_builtin_ptrs_addr =
         get_relocatable_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
     let output = vm
         .get_integer(pre_execution_builtin_ptrs_addr)?
         .into_owned();
-
-
     let output_ptr = output
         .to_usize()
         .ok_or(MathError::Felt252ToUsizeConversion(Box::new(
             output,
         )))?;
-    // TODO: ids.pre_execution_builtin_ptrs should be a BuiltinData, see bootloader impl in cairo-lang for reference;
-    //       so how do we obtain a BuiltinData from ids? Or do we just access its "output" var, which is its first?
     let output_runner_data =
         util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr)?;
 
