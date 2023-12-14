@@ -1,8 +1,10 @@
 use std::any::Any;
 use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::compute_program_hash_chain;
 use crate::hint_processor::builtin_hint_processor::bootloader::types::Task;
+use crate::types::errors::math_errors::MathError;
 use crate::types::relocatable::Relocatable;
 use felt::Felt252;
+use num_traits::ToPrimitive;
 use starknet_crypto::FieldElement;
 use std::collections::HashMap;
 
@@ -408,6 +410,7 @@ pub fn call_task(
             // new_task_locals['WITH_BOOTLOADER'] = True
             new_task_locals.insert("WITH_BOOTLOADER".to_string(), any_box![true]);
 
+            // TODO:
             // vm_load_program(task.program, program_address)
         }
         // elif isinstance(task, CairoPieTask):
@@ -448,12 +451,28 @@ pub fn call_task(
     //     task=task,
     //     output_builtin=output_builtin,
     //     output_ptr=ids.pre_execution_builtin_ptrs.output)
-    let output_ptr =
-        get_ptr_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
+    /*
+    let output =
+        get_integer_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?
+        .into_owned();
+    */
+
+    let pre_execution_builtin_ptrs_addr =
+        get_relocatable_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
+    let output = vm
+        .get_integer(pre_execution_builtin_ptrs_addr)?
+        .into_owned();
+
+
+    let output_ptr = output
+        .to_usize()
+        .ok_or(MathError::Felt252ToUsizeConversion(Box::new(
+            output,
+        )))?;
     // TODO: ids.pre_execution_builtin_ptrs should be a BuiltinData, see bootloader impl in cairo-lang for reference;
     //       so how do we obtain a BuiltinData from ids? Or do we just access its "output" var, which is its first?
     let output_runner_data =
-        util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr.into())?;
+        util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr)?;
 
     exec_scopes.insert_box(vars::OUTPUT_RUNNER_DATA, any_box!(output_runner_data));
 
@@ -638,7 +657,7 @@ mod util {
     pub(crate) fn prepare_output_runner(
         task: &Task,
         output_builtin: &mut OutputBuiltinRunner,
-        output_ptr: Relocatable,
+        output_ptr: usize,
     ) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
         return match task {
             Task::RunProgramTask(_) => {
@@ -650,7 +669,7 @@ mod util {
                             .into_boxed_str(),
                     )),
                 }?;
-                output_builtin.base = output_ptr.segment_index as usize;
+                output_builtin.base = output_ptr;
                 Ok(Some(output_state))
             }
             Task::CairoPieTask(_) => Ok(None),
@@ -915,7 +934,18 @@ mod tests {
     #[test]
     fn test_call_task() {
         let mut vm = vm!();
-        let ids_data = HashMap::<String, HintReference>::new();
+
+        // Allocate space for pre-execution (8 felts), which mimics the `BuiltinData` struct in the
+        // Bootloader's Cairo code. Our code only uses the first felt (`output` field in the struct)
+        vm.segments = segments![((1, 0), 0)];
+        vm.run_context.fp = 8;
+        add_segments!(vm, 1);
+
+
+        let ids_data = non_continuous_ids_data![
+            (vars::PRE_EXECUTION_BUILTIN_PTRS, -8)
+        ];
+
         let mut exec_scopes = ExecutionScopes::new();
 
         let task = Task::RunProgramTask("fixme".to_string());
