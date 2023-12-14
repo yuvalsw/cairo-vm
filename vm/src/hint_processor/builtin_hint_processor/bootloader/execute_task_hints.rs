@@ -8,15 +8,12 @@ use starknet_crypto::FieldElement;
 use std::collections::HashMap;
 
 use num_traits::ToPrimitive;
-use starknet_crypto::FieldElement;
-
-use felt::Felt252;
+use crate::any_box;
+use std::any::Any;
 
 use crate::hint_processor::builtin_hint_processor::bootloader::fact_topologies::{
     get_program_task_fact_topology, FactTopology,
 };
-use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::compute_program_hash_chain;
-use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::program_loader::ProgramLoader;
 use crate::hint_processor::builtin_hint_processor::bootloader::types::{BootloaderVersion, Task};
 use crate::any_box;
@@ -26,7 +23,6 @@ use crate::hint_processor::builtin_hint_processor::hint_utils::{
 };
 use crate::hint_processor::hint_processor_definition::HintReference;
 use crate::serde::deserialize_program::{ApTracking, BuiltinName};
-use crate::types::errors::math_errors::MathError;
 use crate::types::exec_scope::ExecutionScopes;
 use crate::vm::errors::hint_errors::HintError;
 use crate::vm::runners::cairo_pie::{CairoPie, OutputBuiltinAdditionalData, StrippedProgram};
@@ -62,6 +58,11 @@ pub fn allocate_program_data_segment(
     )?;
 
     Ok(())
+}
+
+fn field_element_to_felt(field_element: FieldElement) -> Felt252 {
+    let bytes = field_element.to_bytes_be();
+    Felt252::from_bytes_be(&bytes)
 }
 
 /// Implements
@@ -102,11 +103,6 @@ pub fn load_program_hint(
     exec_scopes.insert_value(vars::PROGRAM_ADDRESS, loaded_program.code_address);
 
     Ok(())
-}
-
-fn field_element_to_felt(field_element: FieldElement) -> Felt252 {
-    let bytes = field_element.to_bytes_be();
-    Felt252::from_bytes_be(&bytes)
 }
 
 /// Implements
@@ -396,14 +392,14 @@ pub fn call_task(
     let task: Task = exec_scopes.get(vars::TASK)?;
 
     // n_builtins = len(task.get_program().builtins)
-    let num_builtins = task.get_program().builtins.len();
+    let num_builtins = get_program_from_task(&task)?.builtins.len();
 
     let mut new_task_locals = HashMap::new();
 
     // TODO: remove clone here when RunProgramTask has proper variant data (not String)
     match task.clone() {
         // if isinstance(task, RunProgramTask):
-        Task::RunProgramTask(program_input) => {
+        Task::Program(program_input) => {
             // new_task_locals['program_input'] = task.program_input
             new_task_locals.insert("program_input".to_string(), any_box![program_input]);
             // new_task_locals['WITH_BOOTLOADER'] = True
@@ -413,7 +409,7 @@ pub fn call_task(
             // vm_load_program(task.program, program_address)
         }
         // elif isinstance(task, CairoPieTask):
-        Task::CairoPieTask(task) => {
+        Task::Pie(task) => {
             let program_address: Relocatable = exec_scopes.get("program_address")?;
 
             // TODO:
@@ -647,7 +643,7 @@ mod util {
         output_ptr: usize,
     ) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
         return match task {
-            Task::RunProgramTask(_) => {
+            Task::Program(_) => {
                 let output_state = match output_builtin.get_additional_data() {
                     BuiltinAdditionalData::Output(output_state) => Ok(output_state),
                     _ => Err(HintError::CustomHint(
@@ -659,7 +655,7 @@ mod util {
                 output_builtin.base = output_ptr;
                 Ok(Some(output_state))
             }
-            Task::CairoPieTask(_) => Ok(None),
+            Task::Pie(_) => Ok(None),
         };
     }
 }
@@ -777,6 +773,34 @@ mod tests {
         assert_eq!(
             vm.segments.segment_sizes[&(program_address.segment_index as usize)],
             expected_program_size
+        );
+    }
+
+    #[rstest]
+    fn test_call_task(fibonacci: Program) {
+        let mut vm = vm!();
+
+        // Allocate space for pre-execution (8 felts), which mimics the `BuiltinData` struct in the
+        // Bootloader's Cairo code. Our code only uses the first felt (`output` field in the struct)
+        vm.segments = segments![((1, 0), 0)];
+        vm.run_context.fp = 8;
+        add_segments!(vm, 1);
+
+        let ids_data = non_continuous_ids_data![(vars::PRE_EXECUTION_BUILTIN_PTRS, -8)];
+
+        let mut exec_scopes = ExecutionScopes::new();
+
+        let task = Task::Program(fibonacci);
+        exec_scopes.insert_box(vars::TASK, Box::new(task));
+
+        assert_matches!(
+            run_hint!(
+                vm,
+                ids_data.clone(),
+                hint_code::EXECUTE_TASK_CALL_TASK,
+                &mut exec_scopes
+            ),
+            Ok(())
         );
     }
 
