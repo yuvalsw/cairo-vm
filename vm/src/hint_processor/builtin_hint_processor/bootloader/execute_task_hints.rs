@@ -182,14 +182,6 @@ pub fn call_task(
                 vm.get_pc(),
             )?;
         }
-        // else:
-        #[allow(unreachable_patterns)]
-        // TODO: we probably don't need this match arm, it makes it look similar to the original hint code though
-        _ => {
-            // raise NotImplementedError(f'Unexpected task type: {type(task).__name__}.')
-            // TODO: proper error
-            return Err(HintError::WrongHintData);
-        }
     }
 
     // output_runner_data = prepare_output_runner(
