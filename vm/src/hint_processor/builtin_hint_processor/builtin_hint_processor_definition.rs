@@ -27,11 +27,11 @@ use super::{
         pack::*,
     },
 };
-use crate::hint_processor::builtin_hint_processor::bootloader::execute_task_hints::{
-    allocate_program_data_segment, call_task, validate_hash,
-    allocate_program_data_segment, load_program_hint,
-};
 use crate::hint_processor::builtin_hint_processor::bootloader::bootloader_hints::compute_and_configure_fact_topologies;
+use crate::hint_processor::builtin_hint_processor::bootloader::execute_task_hints::{
+    allocate_program_data_segment, allocate_program_data_segment, call_task, load_program_hint,
+    validate_hash,
+};
 use crate::hint_processor::builtin_hint_processor::bootloader::simple_bootloader_hints::{
     divide_num_by_2, prepare_task_range_checks, set_ap_to_zero, set_current_task,
     set_tasks_variable,

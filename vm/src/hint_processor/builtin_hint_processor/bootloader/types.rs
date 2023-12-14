@@ -1,8 +1,8 @@
 use crate::{types::program::Program, vm::runners::cairo_pie::CairoPie};
 use felt::Felt252;
 use serde::Deserialize;
-use std::path::Path;
 use serde::{de, Deserialize, Deserializer};
+use std::path::Path;
 
 use felt::Felt252;
 use std::path::PathBuf;
