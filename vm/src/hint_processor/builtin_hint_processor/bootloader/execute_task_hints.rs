@@ -259,7 +259,7 @@ pub fn append_fact_topologies(
 
 mod util {
     use crate::{
-        types::relocatable::{relocate_address, MaybeRelocatable},
+        types::relocatable::{relocate_address, MaybeRelocatable, relocate_value},
         vm::runners::{
             builtin_runner::{
                 BuiltinRunner, OutputBuiltinRunner, SignatureBuiltinRunner, SIGNATURE_BUILTIN_NAME,
@@ -417,9 +417,15 @@ mod util {
             }?;
         }
 
-        for _item in &task.memory {
-            // TODO: relocate memory, perhaps using Memory's relocation table (add_relocation_rule() calls)
-            //       and then call relocate_memory()?
+        // Relocate memory segment
+        for item in &task.memory {
+            let (segment_index, offset) = item.0;
+            let segment_index = segment_index as isize;
+
+            let value = item.1.clone();
+            let value = relocate_value(value, &segment_offsets)?;
+            // TODO: previous impl checked prime number
+            vm.segments.memory.insert(Relocatable { segment_index, offset }, value)?;
         }
 
         Ok(())
