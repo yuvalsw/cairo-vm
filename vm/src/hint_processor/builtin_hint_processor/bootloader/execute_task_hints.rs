@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::vars;
 use crate::hint_processor::builtin_hint_processor::hint_utils::{
-    get_ptr_from_var_name, insert_value_from_var_name, get_relocatable_from_var_name
+    get_ptr_from_var_name, get_relocatable_from_var_name, insert_value_from_var_name,
 };
 use crate::hint_processor::hint_processor_definition::HintReference;
 use crate::serde::deserialize_program::ApTracking;
@@ -199,9 +199,7 @@ pub fn call_task(
         .into_owned();
     let output_ptr = output
         .to_usize()
-        .ok_or(MathError::Felt252ToUsizeConversion(Box::new(
-            output,
-        )))?;
+        .ok_or(MathError::Felt252ToUsizeConversion(Box::new(output)))?;
     let output_runner_data =
         util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr)?;
 
@@ -472,10 +470,7 @@ mod tests {
         vm.run_context.fp = 8;
         add_segments!(vm, 1);
 
-
-        let ids_data = non_continuous_ids_data![
-            (vars::PRE_EXECUTION_BUILTIN_PTRS, -8)
-        ];
+        let ids_data = non_continuous_ids_data![(vars::PRE_EXECUTION_BUILTIN_PTRS, -8)];
 
         let mut exec_scopes = ExecutionScopes::new();
 
