@@ -173,14 +173,10 @@ mod tests {
             single_page: false,
             tasks: vec![
                 TaskSpec {
-                    task: Task {
-                        program: fibonacci.clone(),
-                    },
+                    task: Task::Program(fibonacci.clone()),
                 },
                 TaskSpec {
-                    task: Task {
-                        program: fibonacci.clone(),
-                    },
+                    task: Task::Program(fibonacci.clone()),
                 },
             ],
         }
