@@ -57,6 +57,7 @@ keccak = { workspace = true }
 hashbrown = { workspace = true }
 anyhow = { workspace = true }
 thiserror-no-std = { workspace = true }
+zip = { version="0.6.6" }
 
 # only for std
 num-prime = { version = "0.4.3", features = ["big-int"], optional = true }
