@@ -23,7 +23,12 @@ use nom::{
     sequence::{delimited, tuple},
     Err, IResult,
 };
+use num_bigint::BigUint;
 use num_integer::Integer;
+use num_traits::float::FloatCore;
+use num_traits::Pow;
+use serde::{de, Deserialize, Deserializer};
+use serde_json::Number;
 
 // Checks if the hex string has an odd length.
 // If that is the case, prepends '0' to it.
@@ -271,11 +276,66 @@ fn take_until_unbalanced(
     }
 }
 
+fn deserialize_scientific_notation(n: Number) -> Option<BigUint> {
+    match n.as_f64() {
+        None => {
+            let str = n.to_string();
+            let list: [&str; 2] = str.split('e').collect::<Vec<&str>>().try_into().ok()?;
+
+            let exponent = list[1].parse::<u32>().ok()?;
+            let base = BigUint::parse_bytes(list[0].to_string().as_bytes(), 10)?;
+            Some(base * BigUint::from(10u64).pow(exponent))
+        }
+        Some(float) => BigUint::parse_bytes(FloatCore::round(float).to_string().as_bytes(), 10),
+    }
+}
+
+pub(crate) fn biguint_from_number(n: Number) -> Option<BigUint> {
+    match BigUint::parse_bytes(n.to_string().as_bytes(), 10) {
+        Some(x) => Some(x),
+        None => {
+            // Handle de Number with scientific notation cases
+            // e.g.: n = Number(1e27)
+            let felt = deserialize_scientific_notation(n);
+            if let Some(x) = felt {
+                return Some(x);
+            }
+
+            None
+        }
+    }
+}
+
+pub(crate) fn felt_from_number(n: Number) -> Option<Felt252> {
+    biguint_from_number(n).map(Felt252::from)
+}
+
+pub(crate) fn deserialize_biguint_from_number<'de, D>(deserializer: D) -> Result<BigUint, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let n = Number::deserialize(deserializer)?;
+    biguint_from_number(n).ok_or(de::Error::custom(String::from(
+        "deserialize_bigint_from_number parse error",
+    )))
+}
+
+pub(crate) fn deserialize_felt_from_number<'de, D>(deserializer: D) -> Result<Felt252, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let n = Number::deserialize(deserializer)?;
+    felt_from_number(n).ok_or(de::Error::custom(String::from(
+        "deserialize_felt_from_number parse error",
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::stdlib::string::ToString;
-    use num_traits::{One, Zero};
+    use assert_matches::assert_matches;
+    use num_traits::{Num, One, Zero};
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::*;
@@ -728,6 +788,44 @@ mod tests {
                 "(abc",
                 ErrorKind::TakeUntil
             )))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn test_felt_from_number_with_scientific_notation() {
+        let n = Number::deserialize(serde_json::Value::from(1000000000000000000000000000_u128))
+            .unwrap();
+        assert_eq!(n.to_string(), "1e27".to_owned());
+
+        assert_matches!(
+            deserialize_felt_from_number(n),
+            Ok(x) if x == Felt252::one() * Felt252::from(10).pow(27)
+        );
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn test_felt_from_number_with_scientific_notation_with_fractional_part() {
+        let n = serde_json::Value::Number(Number::from_f64(64e+74).unwrap());
+
+        assert_matches!(
+            deserialize_felt_from_number(n),
+            Ok(x) if x == Felt252::from_str_radix("64", 10).unwrap() * Felt252::from(10).pow(74)
+        );
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn test_felt_from_number_with_scientific_notation_with_fractional_part_f64_max() {
+        let n = serde_json::Value::Number(Number::from_f64(f64::MAX).unwrap());
+        assert_eq!(
+            deserialize_felt_from_number(n).unwrap(),
+            Felt252::from_str_radix(
+                "2082797363194934431336897723140298717588791783575467744530053896730196177808",
+                10
+            )
+            .unwrap()
         );
     }
 }
