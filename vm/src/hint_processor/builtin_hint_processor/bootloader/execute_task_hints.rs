@@ -282,17 +282,31 @@ mod util {
     ) -> Result<(), HintError> {
         // Load memory entries of the inner program.
         // This replaces executing hints in a non-trusted program.
-        // TODO: review: the original type was `WriteOnceDict`, which works quite differently than a Vec.
-        //       we use a fixed size here to prevent unbounded vec size.
+        // We use a Vec as a mapping of usize -> usize to represent a relocation table, as used in
+        // relocate_address() below. However, we also define an insertion fn to ensure "write-once"
+        // behavior
         const RELOCATABLE_TABLE_SIZE: usize = 256;
         let mut segment_offsets = vec![0usize; RELOCATABLE_TABLE_SIZE];
-        segment_offsets[task.metadata.program_segment.index as usize] =
-            program_address.segment_index as usize;
-        segment_offsets[task.metadata.execution_segment.index as usize] = execution_segment_address;
-        segment_offsets[task.metadata.ret_fp_segment.index as usize] =
-            ret_fp.segment_index as usize;
-        segment_offsets[task.metadata.ret_pc_segment.index as usize] =
-            ret_pc.segment_index as usize;
+        let mut write_once = |k: usize, v: usize| {
+            return if segment_offsets[k] != 0usize {
+                Err(HintError::CustomHint(
+                    format!("WriteOnce violation for k: {}, v: {}", k, v)
+                        .to_string().into_boxed_str())
+                )
+            } else {
+                segment_offsets[k] = v;
+                Ok(())
+            }
+        };
+        
+
+        write_once(task.metadata.program_segment.index as usize,
+            program_address.segment_index as usize)?;
+        write_once(task.metadata.execution_segment.index as usize, execution_segment_address)?;
+        write_once(task.metadata.ret_fp_segment.index as usize,
+            ret_fp.segment_index as usize)?;
+        write_once(task.metadata.ret_pc_segment.index as usize,
+            ret_pc.segment_index as usize)?;
 
         // Returns the segment index for the given value.
         // Verifies that value is a RelocatableValue with offset 0.
@@ -338,7 +352,7 @@ mod util {
                 segment_index: (execution_segment_address + idx) as isize,
                 offset: 0,
             };
-            segment_offsets.insert(index, vm.get_relocatable(mem_at)?.segment_index as usize);
+            write_once(index, vm.get_relocatable(mem_at)?.segment_index as usize)?;
             idx += 1;
         }
 
@@ -346,7 +360,7 @@ mod util {
             let index = segment_info.index as usize;
             assert!(index < RELOCATABLE_TABLE_SIZE);
             // TODO: previous passed 'size' to add()
-            segment_offsets[index] = vm.add_memory_segment().segment_index as usize;
+            write_once(index, vm.add_memory_segment().segment_index as usize)?;
         }
 
         let local_relocate_value = |value| -> Result<usize, HintError> {
