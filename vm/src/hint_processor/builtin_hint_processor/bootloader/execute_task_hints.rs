@@ -804,7 +804,7 @@ mod tests {
 
         // Execute it
         call_task(&mut vm, &mut exec_scopes, &ids_data, &ap_tracking)
-            .expect("Hint failed unexpectedly");
+            .unwrap_or_else(|e| panic!("Hint failed unexpectedly: {}", e));
     }
 
     #[rstest]
