@@ -480,8 +480,17 @@ mod util {
         // behavior
         const RELOCATABLE_TABLE_SIZE: usize = 256;
         let mut segment_offsets = vec![0usize; RELOCATABLE_TABLE_SIZE];
+        let mut segment_offsets_written = vec![false; RELOCATABLE_TABLE_SIZE];
         let mut write_once = |k: usize, v: usize| {
-            return if segment_offsets[k] != 0usize {
+            if k >= RELOCATABLE_TABLE_SIZE {
+                return Err(HintError::CustomHint(
+                    format!("WriteOnce OOB (k: {}, v: {})", k, v)
+                        .to_string()
+                        .into_boxed_str()
+                ));
+            }
+
+            return if segment_offsets_written[k] {
                 Err(HintError::CustomHint(
                     format!("WriteOnce violation for k: {}, v: {}", k, v)
                         .to_string()
@@ -489,6 +498,7 @@ mod util {
                 ))
             } else {
                 segment_offsets[k] = v;
+                segment_offsets_written[k] = true;
                 Ok(())
             };
         };
