@@ -306,7 +306,7 @@ mod tests {
     use crate::types::relocatable::Relocatable;
     use crate::utils::test_utils::*;
     use crate::vm::runners::builtin_runner::{BuiltinRunner, OutputBuiltinRunner};
-    use crate::vm::runners::cairo_pie::{BuiltinAdditionalData, PublicMemoryPage};
+    use crate::vm::runners::cairo_pie::{BuiltinAdditionalData, PublicMemoryPage, CairoPie};
 
     use super::*;
 
@@ -403,6 +403,33 @@ mod tests {
             vm.segments.segment_sizes[&(program_address.segment_index as usize)],
             expected_program_size
         );
+    }
+
+    #[test]
+    fn test_load_pie_task() {
+        let path =
+            std::path::Path::new("../cairo_programs/manually_compiled/fibonacci_cairo_pie/fibonacci_pie.zip");
+
+        let cairo_pie = CairoPie::from_file(path).expect("Could not read CairoPie zip file");
+        let task = Task::Pie(cairo_pie);
+        
+        let mut vm = vm!();
+        vm.run_context.fp = 1;
+        // Set program_header_ptr to (2, 0)
+        vm.segments = segments![((1, 0), (2, 0))];
+        let program_header_ptr = Relocatable::from((2, 0));
+        add_segments!(vm, 1);
+
+        let mut exec_scopes = ExecutionScopes::new();
+        exec_scopes.insert_value(vars::PROGRAM_DATA_BASE, program_header_ptr.clone());
+        exec_scopes.insert_value(vars::TASK, task);
+
+        let ids_data = ids_data!["program_header"];
+        let ap_tracking = ApTracking::new();
+
+        load_program_hint(&mut vm, &mut exec_scopes, &ids_data, &ap_tracking)
+            .unwrap_or_else(|e| { panic!("Hint failed unexpectedly: {}", e); });
+
     }
 
     #[rstest]
