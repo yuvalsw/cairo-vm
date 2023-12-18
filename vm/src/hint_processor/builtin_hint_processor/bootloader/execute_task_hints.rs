@@ -259,7 +259,7 @@ pub fn append_fact_topologies(
 
 mod util {
     use crate::{
-        types::relocatable::{relocate_address, MaybeRelocatable, relocate_value},
+        types::relocatable::{relocate_address, relocate_value, MaybeRelocatable},
         vm::runners::{
             builtin_runner::{
                 BuiltinRunner, OutputBuiltinRunner, SignatureBuiltinRunner, SIGNATURE_BUILTIN_NAME,
@@ -425,7 +425,13 @@ mod util {
             let value = item.1.clone();
             let value = relocate_value(value, &segment_offsets)?;
             // TODO: previous impl checked prime number
-            vm.segments.memory.insert(Relocatable { segment_index, offset }, value)?;
+            vm.segments.memory.insert(
+                Relocatable {
+                    segment_index,
+                    offset,
+                },
+                value,
+            )?;
         }
 
         Ok(())
@@ -610,6 +616,7 @@ pub fn write_return_builtins_hint(
 mod tests {
     use assert_matches::assert_matches;
     use rstest::{fixture, rstest};
+    use std::path::Path;
 
     use crate::any_box;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
@@ -671,6 +678,13 @@ mod tests {
 
         Program::from_bytes(&program_content, Some("main"))
             .expect("Loading example program failed unexpectedly")
+    }
+
+    #[fixture]
+    fn fibonacci_pie() -> CairoPie {
+        let pie_file =
+            Path::new("../cairo_programs/manually_compiled/fibonacci_cairo_pie/fibonacci_pie.zip");
+        CairoPie::from_file(pie_file).expect("Failed to load the program PIE")
     }
 
     #[fixture]
@@ -752,6 +766,45 @@ mod tests {
             ),
             Ok(())
         );
+    }
+
+    #[rstest]
+    fn test_call_cairo_pie_task(fibonacci_pie: CairoPie) {
+        let mut vm = vm!();
+
+        // Allocate space for pre-execution (8 felts), which mimics the `BuiltinData` struct in the
+        // Bootloader's Cairo code. Our code only uses the first felt (`output` field in the struct)
+        // We set the program header pointer at (1, 8) and make it point to the start of segment #2.
+        vm.segments = segments![((1, 0), 0), ((1, 8), (2, 0))];
+        vm.run_context.ap = 9;
+        vm.run_context.fp = 9;
+        add_segments!(vm, 1);
+
+        let program_header_ptr = Relocatable::from((2, 0));
+        let ids_data = non_continuous_ids_data![
+            (vars::PRE_EXECUTION_BUILTIN_PTRS, -9),
+            ("program_header", -1)
+        ];
+        let ap_tracking = ApTracking::new();
+
+        let mut exec_scopes = ExecutionScopes::new();
+
+        let mut output_builtin = OutputBuiltinRunner::new(true);
+        output_builtin.initialize_segments(&mut vm.segments);
+        vm.builtin_runners
+            .push(BuiltinRunner::Output(output_builtin));
+
+        let task = Task::Pie(fibonacci_pie);
+        exec_scopes.insert_value(vars::TASK, task);
+        exec_scopes.insert_value(vars::PROGRAM_DATA_BASE, program_header_ptr.clone());
+
+        // Load the program in memory
+        load_program_hint(&mut vm, &mut exec_scopes, &ids_data, &ap_tracking)
+            .expect("Failed to load Cairo PIE task in the VM memory");
+
+        // Execute it
+        call_task(&mut vm, &mut exec_scopes, &ids_data, &ap_tracking)
+            .expect("Hint failed unexpectedly");
     }
 
     #[rstest]
