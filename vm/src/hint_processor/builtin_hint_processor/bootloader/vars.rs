@@ -42,4 +42,3 @@ pub(crate) const N_BUILTINS: &str = "n_builtins";
 
 /// Number of selected builtins for the current program.
 pub(crate) const N_SELECTED_BUILTINS: &str = "n_selected_builtins";
-

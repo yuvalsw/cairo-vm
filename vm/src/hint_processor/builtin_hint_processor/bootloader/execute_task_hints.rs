@@ -259,7 +259,7 @@ pub fn append_fact_topologies(
 
 mod util {
     use crate::{
-        types::relocatable::{relocate_address, MaybeRelocatable, relocate_value},
+        types::relocatable::{relocate_address, relocate_value, MaybeRelocatable},
         vm::runners::{
             builtin_runner::{
                 BuiltinRunner, OutputBuiltinRunner, SignatureBuiltinRunner, SIGNATURE_BUILTIN_NAME,
@@ -291,22 +291,31 @@ mod util {
             return if segment_offsets[k] != 0usize {
                 Err(HintError::CustomHint(
                     format!("WriteOnce violation for k: {}, v: {}", k, v)
-                        .to_string().into_boxed_str())
-                )
+                        .to_string()
+                        .into_boxed_str(),
+                ))
             } else {
                 segment_offsets[k] = v;
                 Ok(())
-            }
+            };
         };
-        
 
-        write_once(task.metadata.program_segment.index as usize,
-            program_address.segment_index as usize)?;
-        write_once(task.metadata.execution_segment.index as usize, execution_segment_address)?;
-        write_once(task.metadata.ret_fp_segment.index as usize,
-            ret_fp.segment_index as usize)?;
-        write_once(task.metadata.ret_pc_segment.index as usize,
-            ret_pc.segment_index as usize)?;
+        write_once(
+            task.metadata.program_segment.index as usize,
+            program_address.segment_index as usize,
+        )?;
+        write_once(
+            task.metadata.execution_segment.index as usize,
+            execution_segment_address,
+        )?;
+        write_once(
+            task.metadata.ret_fp_segment.index as usize,
+            ret_fp.segment_index as usize,
+        )?;
+        write_once(
+            task.metadata.ret_pc_segment.index as usize,
+            ret_pc.segment_index as usize,
+        )?;
 
         // Returns the segment index for the given value.
         // Verifies that value is a RelocatableValue with offset 0.
@@ -439,7 +448,13 @@ mod util {
             let value = item.1.clone();
             let value = relocate_value(value, &segment_offsets)?;
             // TODO: previous impl checked prime number
-            vm.segments.memory.insert(Relocatable { segment_index, offset }, value)?;
+            vm.segments.memory.insert(
+                Relocatable {
+                    segment_index,
+                    offset,
+                },
+                value,
+            )?;
         }
 
         Ok(())
