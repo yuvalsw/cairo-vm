@@ -421,7 +421,7 @@ pub fn call_task(
                 &task,
                 vm,
                 program_address,
-                vm.get_ap().segment_index as usize - num_builtins,
+                (vm.get_ap() - num_builtins)?,
                 vm.get_fp(),
                 vm.get_pc(),
             )?;
@@ -467,9 +467,8 @@ mod util {
     pub(crate) fn load_cairo_pie(
         task: &CairoPie,
         vm: &mut VirtualMachine,
-        // _segments: (),
         program_address: Relocatable,
-        execution_segment_address: usize,
+        execution_segment_address: Relocatable,
         ret_fp: Relocatable,
         ret_pc: Relocatable,
     ) -> Result<(), HintError> {
@@ -509,7 +508,7 @@ mod util {
         )?;
         write_once(
             task.metadata.execution_segment.index as usize,
-            execution_segment_address,
+            execution_segment_address.segment_index as usize,
         )?;
         write_once(
             task.metadata.ret_fp_segment.index as usize,
@@ -560,10 +559,7 @@ mod util {
             let index = extract_segment(pie_mem_element, builtin)? as usize;
             assert!(index < RELOCATABLE_TABLE_SIZE);
 
-            let mem_at = Relocatable {
-                segment_index: (execution_segment_address + idx) as isize,
-                offset: 0,
-            };
+            let mem_at = (execution_segment_address + idx)?;
             write_once(index, vm.get_relocatable(mem_at)?.segment_index as usize)?;
             idx += 1;
         }
