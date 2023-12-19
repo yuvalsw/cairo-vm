@@ -15,6 +15,7 @@ use crate::hint_processor::builtin_hint_processor::bootloader::fact_topologies::
 use crate::hint_processor::builtin_hint_processor::bootloader::program_loader::ProgramLoader;
 use crate::hint_processor::builtin_hint_processor::bootloader::types::{BootloaderVersion, Task};
 use crate::hint_processor::builtin_hint_processor::bootloader::vars;
+use crate::hint_processor::builtin_hint_processor::bootloader::vm_extensions::vm_load_program;
 use crate::hint_processor::builtin_hint_processor::hint_utils::{
     get_ptr_from_var_name, get_relocatable_from_var_name, insert_value_from_var_name,
 };
@@ -146,23 +147,24 @@ pub fn call_task(
 ) -> Result<(), HintError> {
     // assert isinstance(task, Task)
     let task: Task = exec_scopes.get(vars::TASK)?;
+    let program_address: Relocatable = exec_scopes.get(vars::PROGRAM_ADDRESS)?;
 
     // n_builtins = len(task.get_program().builtins)
     let num_builtins = get_program_from_task(&task)?.builtins.len();
 
     let mut new_task_locals = HashMap::new();
 
-    // TODO: remove clone here when RunProgramTask has proper variant data (not String)
-    match task.clone() {
+    match &task {
         // if isinstance(task, RunProgramTask):
-        Task::Program(program_input) => {
+        Task::Program(program) => {
             // new_task_locals['program_input'] = task.program_input
+            // TODO: integrate program_input in Task::Program
+            let program_input: HashMap<String, Box<dyn Any>> = HashMap::new();
             new_task_locals.insert("program_input".to_string(), any_box![program_input]);
             // new_task_locals['WITH_BOOTLOADER'] = True
             new_task_locals.insert("WITH_BOOTLOADER".to_string(), any_box![true]);
 
-            // TODO:
-            // vm_load_program(task.program, program_address)
+            vm_load_program(vm, program, &program_address)?;
         }
         // elif isinstance(task, CairoPieTask):
         Task::Pie(task) => {
@@ -292,7 +294,7 @@ mod util {
                 return Err(HintError::CustomHint(
                     format!("WriteOnce OOB (k: {}, v: {})", k, v)
                         .to_string()
-                        .into_boxed_str()
+                        .into_boxed_str(),
                 ));
             }
 
