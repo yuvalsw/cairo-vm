@@ -450,17 +450,22 @@ mod util {
         for item in &task.memory {
             let (segment_index, offset) = item.0;
             let segment_index = segment_index as isize;
+            let _key = relocate_value(MaybeRelocatable::from((segment_index, offset)), &segment_offsets)?;
 
             let value = item.1.clone();
             let value = relocate_value(value, &segment_offsets)?;
             // TODO: previous impl checked prime number
-            vm.segments.memory.insert(
+            let res = vm.segments.memory.insert(
                 Relocatable {
                     segment_index,
                     offset,
                 },
-                value,
-            )?;
+                value.clone(),
+            );
+            
+            println!("inserted ({}, {}) => {}, got res: {:?}", segment_index, offset, value, res);
+
+            res?
         }
 
         Ok(())
@@ -796,6 +801,7 @@ mod tests {
             Ok(())
         );
     }
+
 
     #[rstest]
     fn test_call_cairo_pie_task(fibonacci_pie: CairoPie) {
