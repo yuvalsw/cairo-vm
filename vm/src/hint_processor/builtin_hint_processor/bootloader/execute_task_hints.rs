@@ -342,7 +342,7 @@ pub fn write_return_builtins_hint(
 mod tests {
     use rstest::{fixture, rstest};
 
-    use felt::Felt252;
+    use crate::Felt252;
 
     use crate::hint_processor::builtin_hint_processor::hint_utils::get_ptr_from_var_name;
     use crate::types::relocatable::Relocatable;

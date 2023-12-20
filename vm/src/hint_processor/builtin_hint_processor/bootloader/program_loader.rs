@@ -40,7 +40,7 @@ fn builtin_to_felt(builtin: &BuiltinName) -> Result<Felt252, ProgramLoaderError>
     //     padding.extend_from_slice(builtin_name.as_bytes());
     //     padding
     // };
-    let buf = builtin_name.as_bytes().clone();
+    let buf = builtin_name.as_bytes();
     Ok(Felt252::from_bytes_be_slice(&buf))
 }
 

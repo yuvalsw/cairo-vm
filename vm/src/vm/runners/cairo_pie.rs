@@ -1,5 +1,14 @@
+use num_bigint::BigUint;
+use num_integer::Integer;
+use std::io::{Read, Seek};
+
+use serde::de::DeserializeOwned;
+use zip::read::ZipFile;
+
 use super::cairo_runner::ExecutionResources;
+use crate::serde::deserialize_utils::deserialize_biguint_from_number;
 use crate::stdlib::prelude::{String, Vec};
+use crate::types::errors::cairo_pie_error::{CairoPieError, DeserializeMemoryError};
 use crate::{
     serde::deserialize_program::BuiltinName,
     stdlib::{collections::HashMap, prelude::*},
@@ -13,7 +22,7 @@ use {
     zip::ZipWriter,
 };
 
-const CAIRO_PIE_VERSION: &str = "1.1";
+pub const CAIRO_PIE_VERSION: &str = "1.1";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SegmentInfo {
@@ -36,7 +45,7 @@ impl From<(isize, usize)> for SegmentInfo {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CairoPieMemory(
     #[serde(serialize_with = "serde_impl::serialize_memory")]
-    pub  Vec<((usize, usize), MaybeRelocatable)>,
+    pub Vec<((usize, usize), MaybeRelocatable)>,
 );
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -51,7 +60,7 @@ pub type Pages = HashMap<usize, PublicMemoryPage>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OutputBuiltinAdditionalData {
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub base: usize,
     pub pages: Pages,
     pub attributes: Attributes,
@@ -79,6 +88,123 @@ pub struct CairoPie {
     pub version: CairoPieVersion,
 }
 
+fn parse_zip_file<T: DeserializeOwned>(mut zip_file: ZipFile) -> Result<T, CairoPieError> {
+    let mut buf = vec![];
+    zip_file.read_to_end(&mut buf)?;
+    serde_json::from_slice(&buf).map_err(|e| e.into())
+}
+
+const N_SEGMENT_BITS: usize = 16;
+const N_OFFSET_BITS: usize = 47;
+const SEGMENT_MASK: u64 = ((1 << N_SEGMENT_BITS) - 1) << N_OFFSET_BITS;
+const OFFSET_MASK: u64 = (1 << N_OFFSET_BITS) - 1;
+
+fn maybe_relocatable_from_le_bytes(bytes: &[u8]) -> MaybeRelocatable {
+    // Little-endian -> the relocatable bit is in the last element
+    let is_relocatable = (bytes[bytes.len() - 1] & 0x80) != 0;
+
+    if !is_relocatable {
+        let felt = Felt252::from_bytes_le_slice(bytes);
+        return MaybeRelocatable::Int(felt);
+    }
+
+    // Relocatable values are guaranteed to fit in a u64
+    let value = {
+        let mut value = 0;
+        for (index, byte) in bytes[..8].iter().enumerate() {
+            value += u64::from(*byte) << (index * 8);
+        }
+        value
+    };
+
+    let segment = (value & SEGMENT_MASK) >> N_OFFSET_BITS;
+    let offset = value & OFFSET_MASK;
+    MaybeRelocatable::RelocatableValue(Relocatable::from((segment as isize, offset as usize)))
+}
+
+fn read_memory_file<R: Read>(
+    mut reader: R,
+    addr_size: usize,
+    felt_size: usize,
+) -> Result<CairoPieMemory, DeserializeMemoryError> {
+    let memory_cell_size = addr_size + felt_size;
+    let mut memory = CairoPieMemory::new();
+    let mut pos: usize = 0;
+
+    loop {
+        let mut element = vec![0; memory_cell_size];
+        match reader.read(&mut element) {
+            Ok(n) => {
+                if n == 0 {
+                    break;
+                }
+                if n != memory_cell_size {
+                    return Err(DeserializeMemoryError::UnexpectedEof);
+                }
+            }
+            Err(e) => return Err(e.into()),
+        }
+        let (address_bytes, value_bytes) = element.split_at(addr_size);
+        let address = maybe_relocatable_from_le_bytes(address_bytes);
+        let value = maybe_relocatable_from_le_bytes(value_bytes);
+
+        match address {
+            MaybeRelocatable::RelocatableValue(relocatable) => {
+                memory.0.push((
+                    (relocatable.segment_index as usize, relocatable.offset),
+                    value,
+                ));
+            }
+            MaybeRelocatable::Int(_value) => {
+                return Err(DeserializeMemoryError::AddressIsNotRelocatable(pos));
+            }
+        }
+        pos += memory_cell_size;
+    }
+
+    Ok(memory)
+}
+
+impl CairoPie {
+    #[cfg(feature = "std")]
+    pub fn from_zip_archive<R: Read + Seek>(
+        mut zip: zip::ZipArchive<R>,
+    ) -> Result<CairoPie, CairoPieError> {
+        let metadata: CairoPieMetadata = parse_zip_file(zip.by_name("metadata.json")?)?;
+        let execution_resources: ExecutionResources =
+            parse_zip_file(zip.by_name("execution_resources.json")?)?;
+        let additional_data: HashMap<String, BuiltinAdditionalData> =
+            parse_zip_file(zip.by_name("additional_data.json")?)?;
+        let version: CairoPieVersion = parse_zip_file(zip.by_name("version.json")?)?;
+
+        let addr_size: usize = 8;
+        let felt_bytes = {
+            let (mut n_bytes, remainder) = metadata.program.prime.bits().div_rem(&8u64);
+            if remainder != 0 {
+                n_bytes += 1;
+            }
+            n_bytes as usize
+        };
+        let memory = read_memory_file(zip.by_name("memory.bin")?, addr_size, felt_bytes)?;
+
+        Ok(CairoPie {
+            metadata,
+            memory,
+            execution_resources,
+            additional_data,
+            version,
+        })
+    }
+
+    #[cfg(feature = "std")]
+    pub fn from_file(path: &Path) -> Result<CairoPie, CairoPieError> {
+        let file = std::fs::File::open(path)?;
+        let zip = zip::ZipArchive::new(file)?;
+
+        CairoPie::from_zip_archive(zip)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CairoPieMetadata {
     pub program: StrippedProgram,
@@ -93,20 +219,17 @@ pub struct CairoPieMetadata {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct StrippedProgram {
     #[serde(serialize_with = "serde_impl::serialize_program_data")]
+    #[serde(deserialize_with = "serde_impl::deserialize_array_of_felts")]
     pub data: Vec<MaybeRelocatable>,
     pub builtins: Vec<BuiltinName>,
     pub main: usize,
-
-    // Dummy field for serialization only.
-    #[serde(serialize_with = "serde_impl::serialize_prime")]
-    pub prime: (),
+    #[serde(deserialize_with = "deserialize_biguint_from_number")]
+    pub prime: BigUint,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CairoPieVersion {
-    // Dummy field for serialization only.
-    #[serde(serialize_with = "serde_impl::serialize_version")]
-    pub cairo_pie: (),
+    pub cairo_pie: String,
 }
 
 impl CairoPie {
@@ -135,20 +258,26 @@ mod serde_impl {
     use crate::stdlib::collections::HashMap;
     use num_traits::Num;
 
-    use super::{CairoPieMemory, CAIRO_PIE_VERSION};
+    use super::CairoPieMemory;
     use crate::stdlib::prelude::{String, Vec};
     use crate::{
         types::relocatable::{MaybeRelocatable, Relocatable},
-        utils::CAIRO_PRIME,
         Felt252,
     };
     use num_bigint::BigUint;
-    use serde::{ser::SerializeSeq, Serialize, Serializer};
+    use serde::de::SeqAccess;
+    use serde::{de, ser::SerializeSeq, Deserializer, Serialize, Serializer};
+    use serde_json::Number;
+    use std::fmt;
+
+    use crate::serde::deserialize_utils::felt_from_number;
 
     pub const ADDR_BYTE_LEN: usize = 8;
     pub const FIELD_BYTE_LEN: usize = 32;
-    pub const ADDR_BASE: u64 = 0x8000000000000000; // 2 ** (8 * ADDR_BYTE_LEN - 1)
-    pub const OFFSET_BASE: u64 = 0x800000000000; // 2 ** OFFSET_BIT_LEN
+    pub const ADDR_BASE: u64 = 0x8000000000000000;
+    // 2 ** (8 * ADDR_BYTE_LEN - 1)
+    pub const OFFSET_BASE: u64 = 0x800000000000;
+    // 2 ** OFFSET_BIT_LEN
     pub const RELOCATE_BASE: &str =
         "8000000000000000000000000000000000000000000000000000000000000000"; // 2 ** (8 * FIELD_BYTE_LEN - 1)
 
@@ -156,8 +285,8 @@ mod serde_impl {
 
     impl<'a> Serialize for Felt252Wrapper<'a> {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+            where
+                S: Serializer,
         {
             #[cfg(any(target_arch = "wasm32", no_std, not(feature = "std")))]
             use crate::alloc::string::ToString;
@@ -171,8 +300,8 @@ mod serde_impl {
         values: &[MaybeRelocatable],
         serializer: S,
     ) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
+        where
+            S: Serializer,
     {
         let mut seq_serializer = serializer.serialize_seq(Some(values.len()))?;
 
@@ -193,8 +322,8 @@ mod serde_impl {
         values: &[((usize, usize), MaybeRelocatable)],
         serializer: S,
     ) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
+        where
+            S: Serializer,
     {
         // Missing segment and memory holes can be ignored
         // as they can be inferred by the address on the prover side
@@ -213,7 +342,7 @@ mod serde_impl {
                         .map_err(|_| serde::ser::Error::custom("invalid relocation base str"))?;
                     let reloc_value = reloc_base
                         + BigUint::from(rel_val.segment_index as usize)
-                            * BigUint::from(OFFSET_BASE)
+                        * BigUint::from(OFFSET_BASE)
                         + BigUint::from(rel_val.offset);
                     res.extend_from_slice(reloc_value.to_bytes_le().as_ref());
                 }
@@ -235,6 +364,18 @@ mod serde_impl {
     }
 
     impl CairoPieMemory {
+        pub fn new() -> Self {
+            Self(vec![])
+        }
+
+        pub fn len(&self) -> usize {
+            self.0.len()
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.0.is_empty()
+        }
+
         pub fn to_bytes(&self) -> Vec<u8> {
             // Missing segment and memory holes can be ignored
             // as they can be inferred by the address on the prover side
@@ -253,7 +394,7 @@ mod serde_impl {
                         let reloc_base = BigUint::from_str_radix(RELOCATE_BASE, 16).unwrap();
                         let reloc_value = reloc_base
                             + BigUint::from(rel_val.segment_index as usize)
-                                * BigUint::from(OFFSET_BASE)
+                            * BigUint::from(OFFSET_BASE)
                             + BigUint::from(rel_val.offset);
                         res.extend_from_slice(reloc_value.to_bytes_le().as_ref());
                     }
@@ -269,30 +410,43 @@ mod serde_impl {
         }
     }
 
-    pub fn serialize_prime<S>(_value: &(), serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        #[cfg(any(target_arch = "wasm32", no_std, not(feature = "std")))]
-        use crate::alloc::string::ToString;
+    pub(crate) struct MaybeRelocatableNumberVisitor;
 
-        // Note: This uses an API intended only for testing.
-        serde_json::Number::from_string_unchecked(CAIRO_PRIME.to_string()).serialize(serializer)
+    impl<'de> de::Visitor<'de> for MaybeRelocatableNumberVisitor {
+        type Value = Vec<MaybeRelocatable>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("Could not deserialize array of hexadecimal")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+        {
+            let mut data: Vec<MaybeRelocatable> = vec![];
+
+            while let Some(n) = seq.next_element::<Number>()? {
+                let felt = felt_from_number(n.clone()).ok_or(de::Error::custom(format!(
+                    "Failed to parse number as felt: {n}"
+                )))?;
+                data.push(MaybeRelocatable::Int(felt));
+            }
+            Ok(data)
+        }
     }
 
-    pub fn serialize_version<S>(_value: &(), serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(CAIRO_PIE_VERSION)
+    pub fn deserialize_array_of_felts<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<Vec<MaybeRelocatable>, D::Error> {
+        d.deserialize_seq(MaybeRelocatableNumberVisitor)
     }
 
     pub fn serialize_signature_additional_data<S>(
         values: &HashMap<Relocatable, (Felt252, Felt252)>,
         serializer: S,
     ) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
+        where
+            S: Serializer,
     {
         let mut seq_serializer = serializer.serialize_seq(Some(values.len()))?;
 
@@ -312,8 +466,8 @@ mod serde_impl {
         values: &[Relocatable],
         serializer: S,
     ) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
+        where
+            S: Serializer,
     {
         let mut seq_serializer = serializer.serialize_seq(Some(values.len()))?;
 
@@ -328,6 +482,9 @@ mod serde_impl {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::utils::CAIRO_PRIME;
+    use rstest::rstest;
+    use std::fs::File;
 
     #[test]
     fn serialize_cairo_pie_memory() {
@@ -391,5 +548,112 @@ mod test {
             "0200000000800000000000000000000000000000000000000000000000000080",
             "value mismatch: {mem_str:?}",
         );
+    }
+
+    #[rstest]
+    #[case(0x8000_0000_0000_0000u64, 0, 0)]
+    #[case(0x8010_0000_0000_1000u64, 32, 0x1000)]
+    fn test_memory_deserialize_relocatable(
+        #[case] value: u64,
+        #[case] expected_segment: isize,
+        #[case] expected_offset: usize,
+    ) {
+        let bytes: [u8; 8] = value.to_le_bytes();
+        let maybe_relocatable = maybe_relocatable_from_le_bytes(&bytes);
+
+        assert_eq!(
+            maybe_relocatable,
+            MaybeRelocatable::RelocatableValue(Relocatable {
+                segment_index: expected_segment,
+                offset: expected_offset,
+            })
+        );
+    }
+
+    #[rstest]
+    #[case([0, 0, 0, 0, 0, 0, 0], 0)]
+    #[case([0, 1, 2, 3, 4, 5, 6], 0x6050403020100)]
+    fn test_memory_deserialize_integer(#[case] bytes: [u8; 7], #[case] expected_value: u64) {
+        let maybe_relocatable = maybe_relocatable_from_le_bytes(&bytes);
+
+        assert_eq!(
+            maybe_relocatable,
+            MaybeRelocatable::Int(Felt252::from(expected_value))
+        );
+    }
+
+    #[test]
+    fn test_read_memory_file() {
+        let path = Path::new("../cairo_programs/manually_compiled/fibonacci_cairo_pie/memory.bin");
+        let file = File::open(path).unwrap();
+
+        let memory = read_memory_file(file, 8, 32).expect("Could not read memory file");
+        assert_eq!(memory.len(), 88);
+    }
+
+    #[test]
+    fn test_cairo_pie_from_file() {
+        let path =
+            Path::new("../cairo_programs/manually_compiled/fibonacci_cairo_pie/fibonacci_pie.zip");
+
+        let cairo_pie = CairoPie::from_file(path).expect("Could not read CairoPie zip file");
+        assert_eq!(cairo_pie.metadata.program.prime, CAIRO_PRIME.clone());
+        assert_eq!(
+            cairo_pie.metadata.program.builtins,
+            vec![BuiltinName::output]
+        );
+        assert_eq!(
+            cairo_pie.metadata.program_segment,
+            SegmentInfo::from((0, 25))
+        );
+        assert_eq!(
+            cairo_pie.metadata.execution_segment,
+            SegmentInfo::from((1, 61))
+        );
+        assert_eq!(cairo_pie.metadata.ret_fp_segment, SegmentInfo::from((3, 0)));
+        assert_eq!(cairo_pie.metadata.ret_pc_segment, SegmentInfo::from((4, 0)));
+        assert_eq!(
+            cairo_pie.metadata.builtin_segments,
+            HashMap::from([("output".to_string(), SegmentInfo::from((2, 2)))])
+        );
+        assert_eq!(cairo_pie.metadata.extra_segments, vec![]);
+
+        assert_eq!(cairo_pie.execution_resources.n_steps, 72);
+        assert_eq!(cairo_pie.execution_resources.n_memory_holes, 0);
+        assert_eq!(
+            cairo_pie.execution_resources.builtin_instance_counter,
+            HashMap::from([("output_builtin".to_string(), 2)])
+        );
+
+        assert_eq!(cairo_pie.memory.len(), 88);
+        // Check a few values
+        assert_eq!(
+            cairo_pie.memory[0],
+            (
+                (0usize, 0usize),
+                MaybeRelocatable::Int(Felt252::from(290341444919459839u64))
+            )
+        );
+        assert_eq!(
+            cairo_pie.memory[cairo_pie.memory.len() - 1],
+            (
+                (1usize, 60usize),
+                MaybeRelocatable::RelocatableValue(Relocatable::from((2, 2)))
+            )
+        );
+
+        assert_eq!(
+            cairo_pie.additional_data,
+            HashMap::from([(
+                "output_builtin".to_string(),
+                BuiltinAdditionalData::Output(OutputBuiltinAdditionalData {
+                    base: 0,
+                    pages: Default::default(),
+                    attributes: Default::default(),
+                })
+            )])
+        );
+
+        assert_eq!(cairo_pie.version.cairo_pie, CAIRO_PIE_VERSION);
     }
 }
