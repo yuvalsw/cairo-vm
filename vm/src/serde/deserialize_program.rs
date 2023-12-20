@@ -29,11 +29,10 @@ use crate::{
     },
 };
 use felt::{Felt252, PRIME_STR};
-use num_traits::float::FloatCore;
-use num_traits::{Num, Pow};
+use num_traits::Num;
 use serde::{de, de::MapAccess, de::SeqAccess, Deserialize, Deserializer, Serialize};
-use serde_json::Number;
 
+use crate::serde::deserialize_utils::deserialize_felt_from_number;
 #[cfg(all(feature = "arbitrary", feature = "std"))]
 use arbitrary::{self, Arbitrary, Unstructured};
 
@@ -129,7 +128,7 @@ pub struct Identifier {
     #[serde(rename(deserialize = "type"))]
     pub type_: Option<String>,
     #[serde(default)]
-    #[serde(deserialize_with = "felt_from_number")]
+    #[serde(deserialize_with = "deserialize_optional_felt_from_number")]
     pub value: Option<Felt252>,
 
     pub full_name: Option<String>,
@@ -221,40 +220,13 @@ pub struct HintLocation {
     pub n_prefix_newlines: u32,
 }
 
-fn felt_from_number<'de, D>(deserializer: D) -> Result<Option<Felt252>, D::Error>
+fn deserialize_optional_felt_from_number<'de, D>(
+    deserializer: D,
+) -> Result<Option<Felt252>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let n = Number::deserialize(deserializer)?;
-    match Felt252::parse_bytes(n.to_string().as_bytes(), 10) {
-        Some(x) => Ok(Some(x)),
-        None => {
-            // Handle de Number with scientific notation cases
-            // e.g.: n = Number(1e27)
-            let felt = deserialize_scientific_notation(n);
-            if felt.is_some() {
-                return Ok(felt);
-            }
-
-            Err(de::Error::custom(String::from(
-                "felt_from_number parse error",
-            )))
-        }
-    }
-}
-
-fn deserialize_scientific_notation(n: Number) -> Option<Felt252> {
-    match n.as_f64() {
-        None => {
-            let str = n.to_string();
-            let list: [&str; 2] = str.split('e').collect::<Vec<&str>>().try_into().ok()?;
-
-            let exponent = list[1].parse::<u32>().ok()?;
-            let base = Felt252::parse_bytes(list[0].to_string().as_bytes(), 10)?;
-            Some(base * Felt252::from(10).pow(exponent))
-        }
-        Some(float) => Felt252::parse_bytes(FloatCore::round(float).to_string().as_bytes(), 10),
-    }
+    deserialize_felt_from_number(deserializer).map(|x| Some(x))
 }
 
 #[cfg_attr(all(feature = "arbitrary", feature = "std"), derive(Arbitrary))]
@@ -513,7 +485,6 @@ mod tests {
     use assert_matches::assert_matches;
     use core::num::NonZeroUsize;
     use felt::felt_str;
-    use num_traits::One;
     use num_traits::Zero;
 
     #[cfg(target_arch = "wasm32")]
@@ -1493,50 +1464,10 @@ mod tests {
 
     #[test]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn test_felt_from_number_with_scientific_notation() {
-        let n = Number::deserialize(serde_json::Value::from(1000000000000000000000000000_u128))
-            .unwrap();
-        assert_eq!(n.to_string(), "1e27".to_owned());
-
-        assert_matches!(
-            felt_from_number(n),
-            Ok(x) if x == Some(Felt252::one() * Felt252::from(10).pow(27))
-        );
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn test_felt_from_number_with_scientific_notation_with_fractional_part() {
-        let n = serde_json::Value::Number(Number::from_f64(64e+74).unwrap());
-
-        assert_matches!(
-            felt_from_number(n),
-            Ok(x) if x == Some(Felt252::from_str_radix("64", 10).unwrap() * Felt252::from(10).pow(74))
-        );
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn test_felt_from_number_with_scientific_notation_with_fractional_part_f64_max() {
-        let n = serde_json::Value::Number(Number::from_f64(f64::MAX).unwrap());
-        assert_eq!(
-            felt_from_number(n).unwrap(),
-            Some(
-                Felt252::from_str_radix(
-                    "2082797363194934431336897723140298717588791783575467744530053896730196177808",
-                    10
-                )
-                .unwrap()
-            )
-        );
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     fn test_felt_from_number_with_scientific_notation_big_exponent() {
         #[derive(Deserialize, Debug, PartialEq)]
         struct Test {
-            #[serde(deserialize_with = "felt_from_number")]
+            #[serde(deserialize_with = "deserialize_optional_felt_from_number")]
             f: Option<Felt252>,
         }
         let malicious_input = &format!(

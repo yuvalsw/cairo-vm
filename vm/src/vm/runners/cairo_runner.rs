@@ -10,6 +10,7 @@ use crate::{
     vm::runners::builtin_runner::SegmentArenaBuiltinRunner,
 };
 
+use crate::vm::runners::cairo_pie::CAIRO_PIE_VERSION;
 use crate::{
     hint_processor::hint_processor_definition::{HintProcessor, HintReference},
     math_utils::safe_div_usize,
@@ -1251,7 +1252,9 @@ impl CairoRunner {
                 .iter()
                 .map(|b| (b.name().to_string(), b.get_additional_data()))
                 .collect(),
-            version: CairoPieVersion { cairo_pie: () },
+            version: CairoPieVersion {
+                cairo_pie: CAIRO_PIE_VERSION.to_string(),
+            },
         })
     }
 
