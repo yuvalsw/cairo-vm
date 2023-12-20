@@ -34,6 +34,7 @@ use std::path::Path;
 
 #[cfg(feature = "extensive_hints")]
 use super::relocatable::Relocatable;
+use crate::utils::CAIRO_PRIME;
 #[cfg(all(feature = "arbitrary", feature = "std"))]
 use arbitrary::{Arbitrary, Unstructured};
 
@@ -364,7 +365,7 @@ impl Program {
                 .shared_program_data
                 .main
                 .ok_or(ProgramError::StrippedProgramNoMain)?,
-            prime: (),
+            prime: CAIRO_PRIME.clone(),
         })
     }
 
