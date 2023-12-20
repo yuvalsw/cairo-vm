@@ -18,6 +18,7 @@ std = [
     "starknet-types-core/std",
     "starknet-crypto/std",
     "dep:num-prime",
+    "dep:zip",
     "thiserror-no-std/std",
     "dep:zip",
 ]
@@ -43,7 +44,6 @@ extensive_hints = []
 print = ["std"]
 
 [dependencies]
-zip = {version = "0.6.6", optional = true }
 mimalloc = { workspace = true, optional = true }
 num-bigint = { workspace = true }
 rand = { workspace = true }
@@ -68,6 +68,7 @@ starknet-types-core = { version = "0.0.6", default-features = false, features = 
 # only for std
 num-prime = { version = "0.4.3", features = ["big-int"], optional = true }
 bitvec = { workspace = true }
+zip = { version = "0.6.6", optional = true }
 
 # Dependencies for cairo-1-hints feature
 cairo-lang-starknet = { workspace = true, optional = true }
