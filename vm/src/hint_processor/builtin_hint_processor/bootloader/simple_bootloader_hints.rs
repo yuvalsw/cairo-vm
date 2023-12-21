@@ -89,7 +89,7 @@ pub fn divide_num_by_2(
     Ok(())
 }
 
-/// Implements %{ 0 %}.
+/// Implements %{ 0 %} (compiled to %{ memory[ap] = to_felt_or_relocatable(0) %}).
 ///
 /// Stores 0 in the AP and returns.
 /// Used as `tempvar use_poseidon = nondet %{ 0 %}`.
