@@ -928,6 +928,9 @@ impl HintProcessorLogic for BuiltinHintProcessor {
                 &hint_data.ids_data,
                 &hint_data.ap_tracking,
             ),
+            hint_code::INNER_SELECT_BUILTINS_SELECT_BUILTIN => {
+                select_builtin(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
             #[cfg(feature = "skip_next_instruction_hint")]
             hint_code::SKIP_NEXT_INSTRUCTION => skip_next_instruction(vm),
             code => Err(HintError::UnknownHint(code.to_string().into_boxed_str())),

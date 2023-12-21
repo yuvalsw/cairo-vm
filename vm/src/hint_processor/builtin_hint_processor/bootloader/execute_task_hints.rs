@@ -503,7 +503,7 @@ mod tests {
     use crate::types::relocatable::Relocatable;
     use crate::utils::test_utils::*;
     use crate::vm::runners::builtin_runner::{BuiltinRunner, OutputBuiltinRunner};
-    use crate::vm::runners::cairo_pie::{BuiltinAdditionalData, PublicMemoryPage};
+    use crate::vm::runners::cairo_pie::{BuiltinAdditionalData, CairoPie, PublicMemoryPage};
 
     use super::*;
 
