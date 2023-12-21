@@ -29,7 +29,7 @@ use nom::{
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_traits::float::FloatCore;
-use num_traits::{Num, Pow};
+use num_traits::Num;
 use serde::{de, Deserialize, Deserializer};
 use serde_json::Number;
 
@@ -280,29 +280,33 @@ fn take_until_unbalanced(
     }
 }
 
-fn deserialize_scientific_notation(n: Number) -> Option<BigUint> {
+fn deserialize_scientific_notation(n: Number) -> Option<Felt252> {
     match n.as_f64() {
         None => {
             let str = n.to_string();
             let list: [&str; 2] = str.split('e').collect::<Vec<&str>>().try_into().ok()?;
-            let exponent = BigUint::from(list[1].parse::<u128>().ok()?);
+            let exponent = list[1].parse::<u128>().ok()?;
             // Apply % CAIRO_PRIME, BECAUSE Felt252::from_dec_str fails with big numbers
             let base_biguint = BigUint::from_str_radix(list[0], 10).ok()? % CAIRO_PRIME.clone();
-            let base = BigUint::from_str_radix(&base_biguint.to_string(), 10).ok()?;
-            Some(base * BigUint::from(10u32).pow(exponent))
+            let base = Felt252::from_dec_str(&base_biguint.to_string()).ok()?;
+            Some(base * Felt252::from(10).pow(exponent))
         }
         Some(float) => {
             let number = BigUint::from_str_radix(&FloatCore::round(float).to_string(), 10).ok()?;
             // Apply % CAIRO_PRIME, BECAUSE Felt252::from_dec_str fails with big numbers
-            BigUint::from_str_radix(&(number % CAIRO_PRIME.clone()).to_string(), 10).ok()
+            Felt252::from_dec_str(&(number % CAIRO_PRIME.clone()).to_string()).ok()
         }
     }
 }
 
 pub(crate) fn biguint_from_number(n: Number) -> Option<BigUint> {
-    match BigUint::parse_bytes(n.to_string().as_bytes(), 10) {
-        Some(x) => Some(x),
-        None => {
+    BigUint::parse_bytes(n.to_string().as_bytes(), 10)
+}
+
+pub(crate) fn felt_from_number(n: Number) -> Option<Felt252> {
+    match Felt252::from_dec_str(&n.to_string()) {
+        Ok(x) => Some(x),
+        Err(_) => {
             // Handle de Number with scientific notation cases
             // e.g.: n = Number(1e27)
             let felt = deserialize_scientific_notation(n);
@@ -313,10 +317,6 @@ pub(crate) fn biguint_from_number(n: Number) -> Option<BigUint> {
             None
         }
     }
-}
-
-pub(crate) fn felt_from_number(n: Number) -> Option<Felt252> {
-    biguint_from_number(n).as_ref().map(Felt252::from)
 }
 
 pub(crate) fn deserialize_biguint_from_number<'de, D>(deserializer: D) -> Result<BigUint, D::Error>
