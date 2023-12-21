@@ -87,7 +87,10 @@ pub fn prepare_simple_bootloader_output_segment(
 /// Implements %{ simple_bootloader_input = bootloader_input %}
 pub fn prepare_simple_bootloader_input(exec_scopes: &mut ExecutionScopes) -> Result<(), HintError> {
     let bootloader_input: BootloaderInput = exec_scopes.get(vars::BOOTLOADER_INPUT)?;
-    exec_scopes.insert_value(vars::SIMPLE_BOOTLOADER_INPUT, bootloader_input);
+    exec_scopes.insert_value(
+        vars::SIMPLE_BOOTLOADER_INPUT,
+        bootloader_input.simple_bootloader_input,
+    );
 
     Ok(())
 }
@@ -564,10 +567,13 @@ mod tests {
 
         prepare_simple_bootloader_input(&mut exec_scopes).expect("Hint failed unexpectedly");
 
-        let simple_bootloader_input: BootloaderInput = exec_scopes
+        let simple_bootloader_input: SimpleBootloaderInput = exec_scopes
             .get(vars::SIMPLE_BOOTLOADER_INPUT)
             .expect("Simple bootloader input not in scope");
-        assert_eq!(simple_bootloader_input, bootloader_input);
+        assert_eq!(
+            simple_bootloader_input,
+            bootloader_input.simple_bootloader_input
+        );
     }
 
     #[test]
