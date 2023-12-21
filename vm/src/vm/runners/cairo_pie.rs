@@ -136,7 +136,7 @@ fn read_memory_file<R: Read>(
             Err(e) => return Err(e.into()),
         }
         let (address_bytes, value_bytes) = element.split_at(addr_size);
-        let address = maybe_relocatable_from_le_bytes(address_bytes.clone());
+        let address = maybe_relocatable_from_le_bytes(address_bytes);
         let value = maybe_relocatable_from_le_bytes(value_bytes);
 
         match address {
