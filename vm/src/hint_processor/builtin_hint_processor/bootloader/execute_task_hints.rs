@@ -8,10 +8,6 @@ use std::any::Any;
 use std::collections::HashMap;
 
 use crate::any_box;
-use num_traits::ToPrimitive;
-use std::any::Any;
-
-use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::fact_topologies::{
     get_program_task_fact_topology, FactTopology,
 };
@@ -33,8 +29,6 @@ fn get_program_from_task(task: &Task) -> Result<StrippedProgram, HintError> {
     task.get_program()
         .map_err(|e| HintError::CustomHint(e.to_string().into_boxed_str()))
 }
-use crate::vm::runners::cairo_pie::CairoPie;
-use crate::vm::vm_core::VirtualMachine;
 
 use self::util::load_cairo_pie;
 
@@ -693,7 +687,6 @@ mod tests {
 
     use assert_matches::assert_matches;
     use felt::Felt252;
-    use rstest::rstest;
 
     use crate::any_box;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
@@ -972,33 +965,5 @@ mod tests {
             .get(vars::N_SELECTED_BUILTINS)
             .expect("n_selected_builtins should be set");
         assert_eq!(n_selected_builtins, n_builtins);
-    }
-
-    #[test]
-    fn test_call_task() {
-        let mut vm = vm!();
-
-        // Allocate space for pre-execution (8 felts), which mimics the `BuiltinData` struct in the
-        // Bootloader's Cairo code. Our code only uses the first felt (`output` field in the struct)
-        vm.segments = segments![((1, 0), 0)];
-        vm.run_context.fp = 8;
-        add_segments!(vm, 1);
-
-        let ids_data = non_continuous_ids_data![(vars::PRE_EXECUTION_BUILTIN_PTRS, -8)];
-
-        let mut exec_scopes = ExecutionScopes::new();
-
-        let task = Task::RunProgramTask("fixme".to_string());
-        exec_scopes.insert_box(vars::TASK, Box::new(task));
-
-        assert_matches!(
-            run_hint!(
-                vm,
-                ids_data.clone(),
-                hint_code::EXECUTE_TASK_CALL_TASK,
-                &mut exec_scopes
-            ),
-            Ok(())
-        );
     }
 }

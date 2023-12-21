@@ -170,8 +170,12 @@ mod tests {
             fact_topologies_path: None,
             single_page: false,
             tasks: vec![
-                Task::RunProgramTask(Default::default()),
-                Task::RunProgramTask(Default::default()),
+                TaskSpec {
+                    task: Task::Program(fibonacci.clone()),
+                },
+                TaskSpec {
+                    task: Task::Program(fibonacci.clone()),
+                },
             ],
         }
     }

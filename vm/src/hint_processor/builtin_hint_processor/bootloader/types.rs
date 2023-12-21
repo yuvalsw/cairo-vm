@@ -2,18 +2,11 @@ use std::path::PathBuf;
 
 use serde::{de, Deserialize, Deserializer};
 
-use crate::{types::program::Program, vm::runners::cairo_pie::CairoPie};
 use felt::Felt252;
 
 use crate::serde::deserialize_program::deserialize_and_parse_program;
 use crate::types::errors::program_errors::ProgramError;
-use serde::{de, Deserialize, Deserializer};
 
-use std::path::PathBuf;
-
-use crate::serde::deserialize_program::deserialize_and_parse_program;
-
-use crate::types::errors::program_errors::ProgramError;
 use crate::utils::test_utils::Program;
 use crate::vm::runners::cairo_pie::{CairoPie, StrippedProgram};
 
