@@ -1534,7 +1534,8 @@ pub const SIMPLE_BOOTLOADER_SET_CURRENT_TASK: &str =
 task_id = len(simple_bootloader_input.tasks) - ids.n_tasks
 task = simple_bootloader_input.tasks[task_id].load_task()";
 
-pub const SIMPLE_BOOTLOADER_ZERO: &str = "0";
+// Appears as nondet %{ 0 %} in the code.
+pub const SIMPLE_BOOTLOADER_ZERO: &str = "memory[ap] = to_felt_or_relocatable(0)";
 
 pub const EXECUTE_TASK_ALLOCATE_PROGRAM_DATA_SEGMENT: &str =
     "ids.program_data_ptr = program_data_base = segments.add()";
