@@ -1,22 +1,22 @@
-use std::any::Any;
 use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::compute_program_hash_chain;
 use crate::types::errors::math_errors::MathError;
 use crate::types::relocatable::Relocatable;
 use felt::Felt252;
 use num_traits::ToPrimitive;
 use starknet_crypto::FieldElement;
+use std::any::Any;
 use std::collections::HashMap;
 
-use num_traits::ToPrimitive;
 use crate::any_box;
+use num_traits::ToPrimitive;
 use std::any::Any;
 
+use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::fact_topologies::{
     get_program_task_fact_topology, FactTopology,
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::program_loader::ProgramLoader;
 use crate::hint_processor::builtin_hint_processor::bootloader::types::{BootloaderVersion, Task};
-use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::vars;
 use crate::hint_processor::builtin_hint_processor::hint_utils::{
     get_ptr_from_var_name, get_relocatable_from_var_name, insert_value_from_var_name,
@@ -485,7 +485,7 @@ mod util {
                 return Err(HintError::CustomHint(
                     format!("WriteOnce OOB (k: {}, v: {})", k, v)
                         .to_string()
-                        .into_boxed_str()
+                        .into_boxed_str(),
                 ));
             }
 
@@ -691,9 +691,9 @@ mod util {
 mod tests {
     use rstest::{fixture, rstest};
 
+    use assert_matches::assert_matches;
     use felt::Felt252;
     use rstest::rstest;
-    use assert_matches::assert_matches;
 
     use crate::any_box;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
