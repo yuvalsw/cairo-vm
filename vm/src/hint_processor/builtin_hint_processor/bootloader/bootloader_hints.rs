@@ -580,8 +580,8 @@ mod tests {
     fn test_restore_bootloader_output() {
         let mut vm: VirtualMachine = vm!();
         // The VM must have an existing output segment
-        vm.builtin_runners =
-            vec![OutputBuiltinRunner::from_segment(&vm.add_memory_segment(), true).into()];
+        let output_segment = vm.add_memory_segment();
+        vm.builtin_runners = vec![OutputBuiltinRunner::from_segment(&output_segment, true).into()];
 
         let mut exec_scopes = ExecutionScopes::new();
         let new_segment = vm.add_memory_segment();

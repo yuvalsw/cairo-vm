@@ -41,6 +41,14 @@ impl OutputBuiltinRunner {
         }
     }
 
+    pub fn new_state(&mut self, base: usize, included: bool) {
+        self.base = base;
+        self.pages = HashMap::default();
+        self.attributes = HashMap::default();
+        self.stop_ptr = None;
+        self.included = included;
+    }
+
     pub fn initialize_segments(&mut self, segments: &mut MemorySegmentManager) {
         self.base = segments.add().segment_index as usize // segments.add() always returns a positive index
     }
