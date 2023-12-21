@@ -1540,7 +1540,7 @@ segments.finalize(program_data_base.segment_index, program_data_size)";
 pub const EXECUTE_TASK_VALIDATE_HASH: &str = "# Validate hash.
 from starkware.cairo.bootloaders.hash_program import compute_program_hash_chain
 
-assert memory[ids.output_ptr + 1] == compute_program_hash_chain(task.get_program()), \
+assert memory[ids.output_ptr + 1] == compute_program_hash_chain(task.get_program()), \\
   'Computed hash does not match input.'";
 
 pub const EXECUTE_TASK_ASSERT_PROGRAM_ADDRESS: &str = "# Sanity check.
