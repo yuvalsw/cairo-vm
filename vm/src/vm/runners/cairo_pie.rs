@@ -224,6 +224,7 @@ pub struct StrippedProgram {
     pub builtins: Vec<BuiltinName>,
     pub main: usize,
     #[serde(deserialize_with = "deserialize_biguint_from_number")]
+    #[serde(serialize_with = "serde_impl::serialize_prime")]
     pub prime: BigUint,
 }
 
@@ -271,6 +272,8 @@ mod serde_impl {
     use std::fmt;
 
     use crate::serde::deserialize_utils::felt_from_number;
+
+    use crate::utils::CAIRO_PRIME;
 
     pub const ADDR_BYTE_LEN: usize = 8;
     pub const FIELD_BYTE_LEN: usize = 32;
@@ -408,6 +411,17 @@ mod serde_impl {
             }
             res
         }
+    }
+
+    pub fn serialize_prime<S>(_value: &BigUint, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+    {
+        #[cfg(any(target_arch = "wasm32", no_std, not(feature = "std")))]
+        use crate::alloc::string::ToString;
+
+        // Note: This uses an API intended only for testing.
+        Number::from_string_unchecked(CAIRO_PRIME.to_string()).serialize(serializer)
     }
 
     pub(crate) struct MaybeRelocatableNumberVisitor;
