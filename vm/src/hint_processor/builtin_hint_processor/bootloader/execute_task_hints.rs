@@ -432,12 +432,8 @@ pub fn call_task(
     //     output_ptr=ids.pre_execution_builtin_ptrs.output)
     let pre_execution_builtin_ptrs_addr =
         get_relocatable_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
-    let output = vm
-        .get_integer(pre_execution_builtin_ptrs_addr)?
-        .into_owned();
-    let output_ptr = output
-        .to_usize()
-        .ok_or(MathError::Felt252ToUsizeConversion(Box::new(output)))?;
+    // The output field is the first one in the BuiltinData struct
+    let output_ptr = vm.get_relocatable(&pre_execution_builtin_ptrs_addr + 0)?;
     let output_runner_data =
         util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr)?;
 
@@ -465,7 +461,7 @@ mod util {
     pub(crate) fn prepare_output_runner(
         task: &Task,
         output_builtin: &mut OutputBuiltinRunner,
-        output_ptr: usize,
+        output_ptr: Relocatable,
     ) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
         return match task {
             Task::Program(_) => {
@@ -477,7 +473,7 @@ mod util {
                             .into_boxed_str(),
                     )),
                 }?;
-                output_builtin.base = output_ptr;
+                output_builtin.new_state(output_ptr.segment_index as usize, true);
                 Ok(Some(output_state))
             }
             Task::Pie(_) => Ok(None),
