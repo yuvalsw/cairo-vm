@@ -8,7 +8,7 @@ use crate::Felt252;
 
 use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::fact_topologies::{
-    get_program_task_fact_topology, FactTopology,
+    get_task_fact_topology, FactTopology,
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::load_cairo_pie::load_cairo_pie;
 use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::compute_program_hash_chain;
@@ -120,7 +120,7 @@ pub fn append_fact_topologies(
     ap_tracking: &ApTracking,
 ) -> Result<(), HintError> {
     let task: Task = exec_scopes.get(vars::TASK)?;
-    let output_runner_data: OutputBuiltinAdditionalData =
+    let output_runner_data: Option<OutputBuiltinAdditionalData> =
         exec_scopes.get(vars::OUTPUT_RUNNER_DATA)?;
     let fact_topologies: &mut Vec<FactTopology> = exec_scopes.get_mut_ref(vars::FACT_TOPOLOGIES)?;
 
@@ -145,7 +145,7 @@ pub fn append_fact_topologies(
 
     let output_builtin = vm.get_output_builtin()?;
     let fact_topology =
-        get_program_task_fact_topology(output_size, &task, output_builtin, output_runner_data)
+        get_task_fact_topology(output_size, &task, output_builtin, output_runner_data)
             .map_err(Into::<HintError>::into)?;
     fact_topologies.push(fact_topology);
 
@@ -443,7 +443,7 @@ pub fn call_task(
     let output_runner_data =
         util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr)?;
 
-    exec_scopes.insert_box(vars::OUTPUT_RUNNER_DATA, any_box!(output_runner_data));
+    exec_scopes.insert_value(vars::OUTPUT_RUNNER_DATA, output_runner_data);
 
     exec_scopes.enter_scope(new_task_locals);
 
