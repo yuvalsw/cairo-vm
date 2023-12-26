@@ -24,6 +24,7 @@ use crate::types::errors::math_errors::MathError;
 use crate::types::exec_scope::ExecutionScopes;
 use crate::types::relocatable::Relocatable;
 use crate::vm::errors::hint_errors::HintError;
+use crate::vm::errors::memory_errors::MemoryError;
 use crate::vm::runners::cairo_pie::{CairoPie, OutputBuiltinAdditionalData, StrippedProgram};
 use crate::vm::vm_core::VirtualMachine;
 use crate::vm::vm_memory::memory::Memory;
@@ -273,8 +274,12 @@ fn write_return_builtins(
         }
         // The builtin is unused, hence its value is the same as before calling the program.
         else {
+            let pre_execution_builtin_addr = pre_execution_builtins_addr + index;
             let pre_execution_value = memory
-                .get_integer(pre_execution_builtins_addr + index)?
+                .get(&pre_execution_builtin_addr)
+                .ok_or_else(|| {
+                    MemoryError::UnknownMemoryCell(Box::new(pre_execution_builtin_addr))
+                })?
                 .into_owned();
             memory.insert_value(return_builtins_addr + index, pre_execution_value)?;
         }
@@ -387,7 +392,8 @@ pub fn call_task(
     let task: Task = exec_scopes.get(vars::TASK)?;
 
     // n_builtins = len(task.get_program().builtins)
-    let num_builtins = get_program_from_task(&task)?.builtins.len();
+    let n_builtins = get_program_from_task(&task)?.builtins.len();
+    exec_scopes.insert_value(vars::N_BUILTINS, n_builtins);
 
     let mut new_task_locals = HashMap::new();
 
@@ -418,7 +424,7 @@ pub fn call_task(
                 cairo_pie,
                 vm,
                 program_address,
-                (vm.get_ap() - num_builtins)?,
+                (vm.get_ap() - n_builtins)?,
                 vm.get_fp(),
                 vm.get_pc(),
             )
@@ -721,7 +727,7 @@ mod tests {
             pages: HashMap::new(),
             attributes: HashMap::new(),
         };
-        exec_scopes.insert_value(vars::OUTPUT_RUNNER_DATA, output_runner_data.clone());
+        exec_scopes.insert_value(vars::OUTPUT_RUNNER_DATA, Some(output_runner_data.clone()));
         exec_scopes.insert_value(vars::TASK, task);
         exec_scopes.insert_value(vars::FACT_TOPOLOGIES, Vec::<FactTopology>::new());
 
