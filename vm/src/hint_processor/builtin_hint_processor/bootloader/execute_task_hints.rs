@@ -617,7 +617,7 @@ mod tests {
 
         // Allocate space for pre-execution (8 felts), which mimics the `BuiltinData` struct in the
         // Bootloader's Cairo code. Our code only uses the first felt (`output` field in the struct)
-        vm.segments = segments![((1, 0), 0)];
+        vm.segments = segments![((1, 0), (2, 0))];
         vm.run_context.fp = 8;
         add_segments!(vm, 1);
 
@@ -653,7 +653,7 @@ mod tests {
         // the Bootloader Cairo code. Our code only uses the first felt (`output` field in the
         // struct). Finally, we put the mocked output of `select_input_builtins` in the next
         // memory address and increase the AP register accordingly.
-        vm.segments = segments![((1, 0), (2, 0)), ((1, 1), 42), ((1, 9), (4, 0))];
+        vm.segments = segments![((1, 0), (2, 0)), ((1, 1), (4, 0)), ((1, 9), (4, 42))];
         vm.run_context.ap = 10;
         vm.run_context.fp = 9;
         add_segments!(vm, 3);
