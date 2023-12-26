@@ -1466,7 +1466,9 @@ pub const BOOTLOADER_IMPORT_PACKED_OUTPUT_SCHEMAS: &str =
     PlainPackedOutput,
 )";
 
-pub const BOOTLOADER_IS_PLAIN_PACKED_OUTPUT: &str = "isinstance(packed_output, PlainPackedOutput)";
+// Appears as nondet %{ isinstance(packed_output, PlainPackedOutput) %} in the code.
+pub const BOOTLOADER_IS_PLAIN_PACKED_OUTPUT: &str =
+    "memory[ap] = to_felt_or_relocatable(isinstance(packed_output, PlainPackedOutput))";
 
 pub const BOOTLOADER_SAVE_OUTPUT_POINTER: &str = "output_start = ids.output_ptr";
 
