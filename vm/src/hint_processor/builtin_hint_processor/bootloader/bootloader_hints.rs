@@ -229,6 +229,7 @@ pub fn import_packed_output_schemas() -> Result<(), HintError> {
 }
 
 /// Implements %{ isinstance(packed_output, PlainPackedOutput) %}
+/// (compiled to %{ memory[ap] = to_felt_or_relocatable(isinstance(packed_output, PlainPackedOutput)) %}).
 ///
 /// Stores the result in the `ap` register to be accessed by the program.
 pub fn is_plain_packed_output(
