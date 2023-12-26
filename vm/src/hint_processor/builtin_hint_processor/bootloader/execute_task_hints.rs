@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::collections::HashMap;
 
-use num_traits::ToPrimitive;
 use starknet_crypto::FieldElement;
 
 use felt::Felt252;
@@ -20,7 +19,6 @@ use crate::hint_processor::builtin_hint_processor::hint_utils::{
 };
 use crate::hint_processor::hint_processor_definition::HintReference;
 use crate::serde::deserialize_program::{ApTracking, BuiltinName};
-use crate::types::errors::math_errors::MathError;
 use crate::types::exec_scope::ExecutionScopes;
 use crate::types::relocatable::Relocatable;
 use crate::vm::errors::hint_errors::HintError;
@@ -130,18 +128,9 @@ pub fn append_fact_topologies(
         get_relocatable_from_var_name("return_builtin_ptrs", vm, ids_data, ap_tracking)?;
 
     // The output field is the first one in the BuiltinData struct
-    let output_start = vm
-        .get_integer(pre_execution_builtin_ptrs_addr)?
-        .into_owned();
-    let output_end = vm.get_integer(return_builtin_ptrs_addr)?.into_owned();
-    let output_size = {
-        let output_size_felt = output_end - output_start;
-        output_size_felt
-            .to_usize()
-            .ok_or(MathError::Felt252ToUsizeConversion(Box::new(
-                output_size_felt,
-            )))
-    }?;
+    let output_start = vm.get_relocatable(pre_execution_builtin_ptrs_addr)?;
+    let output_end = vm.get_relocatable(return_builtin_ptrs_addr)?;
+    let output_size = (output_end - output_start)?;
 
     let output_builtin = vm.get_output_builtin()?;
     let fact_topology =
@@ -693,8 +682,9 @@ mod tests {
 
         // Allocate space for the pre-execution and return builtin structs (2 x 8 felts).
         // The pre-execution struct starts at (1, 0) and the return struct at (1, 8).
-        // We only set the output values to 0 and 10, respectively, to get an output size of 10.
-        vm.segments = segments![((1, 0), 0), ((1, 8), 10),];
+        // We only set the output values to (2, 0) and (2, 10), respectively, to get an output size
+        // of 10.
+        vm.segments = segments![((1, 0), (2, 0)), ((1, 8), (2, 10)),];
         vm.run_context.fp = 16;
         add_segments!(vm, 1);
 
