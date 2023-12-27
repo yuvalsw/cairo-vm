@@ -463,13 +463,13 @@ impl VirtualMachine {
             return Err(MemoryError::UnknownMemoryCell(Box::new((0, pc).into())))?;
         }
 
-        let mut inst_cache = core::mem::take(&mut self.instruction_cache);
-        inst_cache.resize((pc + 1).max(inst_cache.len()), None);
+        // let mut inst_cache = core::mem::take(&mut self.instruction_cache);
+        // inst_cache.resize((pc + 1).max(inst_cache.len()), None);
 
-        let instruction = inst_cache.get_mut(pc).unwrap();
-        if instruction.is_none() {
-            *instruction = Some(self.decode_current_instruction()?);
-        }
+        // let instruction = inst_cache.get_mut(pc).unwrap();
+        // if instruction.is_none() {
+        let instruction = Some(self.decode_current_instruction()?);
+        // }
         let instruction = instruction.as_ref().unwrap();
         if !self.skip_instruction_execution {
             self.run_instruction(instruction)?;
@@ -477,7 +477,7 @@ impl VirtualMachine {
             self.run_context.pc += instruction.size();
             self.skip_instruction_execution = false;
         }
-        self.instruction_cache = inst_cache;
+        // self.instruction_cache = inst_cache;
         Ok(())
     }
 
