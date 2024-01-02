@@ -557,7 +557,7 @@ impl CairoRunner {
                 .program
                 .shared_program_data
                 .hints_collection
-                .get_hint_range_for_pc(vm.run_context.pc.offset)
+                .get_hint_range_for_pc(vm.run_context.pc)
                 .and_then(|range| {
                     range.and_then(|(start, length)| hint_data.get(start..start + length.get()))
                 })
@@ -597,7 +597,7 @@ impl CairoRunner {
                 .program
                 .shared_program_data
                 .hints_collection
-                .get_hint_range_for_pc(vm.run_context.pc.offset)
+                .get_hint_range_for_pc(vm.run_context.pc)
                 .and_then(|range| {
                     range.and_then(|(start, length)| hint_data.get(start..start + length.get()))
                 })

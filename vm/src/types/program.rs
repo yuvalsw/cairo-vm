@@ -31,6 +31,7 @@ use felt::{Felt252, PRIME_STR};
 #[cfg(feature = "std")]
 use std::path::Path;
 
+use crate::types::relocatable::Relocatable;
 use crate::utils::CAIRO_PRIME;
 #[cfg(all(feature = "arbitrary", feature = "std"))]
 use arbitrary::{Arbitrary, Unstructured};
@@ -153,8 +154,12 @@ impl HintsCollection {
         self.hints.iter()
     }
 
-    pub fn get_hint_range_for_pc(&self, pc: usize) -> Option<HintRange> {
-        self.hints_ranges.get(pc).cloned()
+    pub fn get_hint_range_for_pc(&self, pc: Relocatable) -> Option<HintRange> {
+        if pc.segment_index != 0 {
+            return None;
+        }
+
+        self.hints_ranges.get(pc.offset).cloned()
     }
 }
 
