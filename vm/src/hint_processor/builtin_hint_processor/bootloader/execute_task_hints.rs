@@ -405,6 +405,15 @@ pub fn call_task(
             let program_address: Relocatable = exec_scopes.get("program_address")?;
 
             // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
+            // TODO: we hardcode the return PC for now, we need a way to access the program
+            //       identifiers to compute this correctly
+            let ret_pc = Relocatable::from((0, 285));
+            // let ret_pc_label = get_ptr_from_var_name("ret_pc_label", vm, ids_data, ap_tracking)?;
+            // let call_task = get_ptr_from_var_name("call_task", vm, ids_data, ap_tracking)?;
+            //
+            // let ret_pc = (ret_pc_label - call_task)?;
+            // let ret_pc = (vm.run_context.pc + ret_pc)?;
+
             // load_cairo_pie(
             //     task=task.cairo_pie, memory=memory, segments=segments,
             //     program_address=program_address, execution_segment_address= ap - n_builtins,
@@ -415,7 +424,7 @@ pub fn call_task(
                 program_address,
                 (vm.get_ap() - n_builtins)?,
                 vm.get_fp(),
-                vm.get_pc(),
+                ret_pc,
             )
             .map_err(Into::<HintError>::into)?;
         }
