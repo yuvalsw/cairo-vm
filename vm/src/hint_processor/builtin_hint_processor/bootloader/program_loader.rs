@@ -35,13 +35,7 @@ fn builtin_to_felt(builtin: &BuiltinName) -> Result<Felt252, ProgramLoaderError>
         .strip_suffix("_builtin")
         .unwrap_or(builtin.name());
 
-    // let buf = {
-    //     let mut padding: Vec<u8> = vec![0; 32 - builtin_name.len()];
-    //     padding.extend_from_slice(builtin_name.as_bytes());
-    //     padding
-    // };
-    let buf = builtin_name.as_bytes().clone();
-    Ok(Felt252::from_bytes_be_slice(&buf))
+    Ok(Felt252::from_bytes_be_slice(builtin_name.as_bytes()))
 }
 
 pub struct LoadedProgram {
