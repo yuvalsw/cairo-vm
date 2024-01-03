@@ -308,7 +308,7 @@ mod tests {
         any_box,
         hint_processor::{
             builtin_hint_processor::builtin_hint_processor_definition::{
-                BuiltinHintProcessor, HintProcessorData,
+                BuiltinHintProcessor, HintProcessorData, ProgramContext,
             },
             hint_processor_definition::HintProcessorLogic,
         },

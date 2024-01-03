@@ -134,10 +134,22 @@ use crate::{
 #[cfg(feature = "skip_next_instruction_hint")]
 use crate::hint_processor::builtin_hint_processor::skip_next_instruction::skip_next_instruction;
 
+use super::blake2s_utils::example_blake2s_compress;
 #[cfg(feature = "print")]
 use crate::hint_processor::builtin_hint_processor::print::{print_array, print_dict, print_felt};
+use crate::serde::deserialize_program::Identifier;
 
-use super::blake2s_utils::example_blake2s_compress;
+pub struct ProgramContext {
+    pub identifiers: HashMap<String, Identifier>,
+}
+
+impl Default for ProgramContext {
+    fn default() -> Self {
+        Self {
+            identifiers: Default::default(),
+        }
+    }
+}
 
 pub struct HintProcessorData {
     pub code: String,
@@ -161,6 +173,7 @@ pub struct HintFunc(
         dyn Fn(
                 &mut VirtualMachine,
                 &mut ExecutionScopes,
+                &ProgramContext,
                 &HashMap<String, HintReference>,
                 &ApTracking,
                 &HashMap<String, Felt252>,
@@ -197,6 +210,7 @@ impl HintProcessorLogic for BuiltinHintProcessor {
         &mut self,
         vm: &mut VirtualMachine,
         exec_scopes: &mut ExecutionScopes,
+        program_context: &ProgramContext,
         hint_data: &Box<dyn Any>,
         constants: &HashMap<String, Felt252>,
     ) -> Result<(), HintError> {
@@ -208,6 +222,7 @@ impl HintProcessorLogic for BuiltinHintProcessor {
             return hint_func.0(
                 vm,
                 exec_scopes,
+                program_context,
                 &hint_data.ids_data,
                 &hint_data.ap_tracking,
                 constants,
@@ -1358,6 +1373,7 @@ mod tests {
     fn enter_scope(
         _vm: &mut VirtualMachine,
         exec_scopes: &mut ExecutionScopes,
+        _program_context: &ProgramContext,
         _ids_data: &HashMap<String, HintReference>,
         _ap_tracking: &ApTracking,
         _constants: &HashMap<String, Felt252>,
@@ -1382,6 +1398,7 @@ mod tests {
             hint_processor.execute_hint(
                 &mut vm,
                 exec_scopes,
+                &mut ProgramContext::default(),
                 &any_box!(hint_data),
                 &HashMap::new(),
             ),
@@ -1394,6 +1411,7 @@ mod tests {
             hint_processor.execute_hint(
                 &mut vm,
                 exec_scopes,
+                &mut ProgramContext::default(),
                 &any_box!(hint_data),
                 &HashMap::new(),
             ),

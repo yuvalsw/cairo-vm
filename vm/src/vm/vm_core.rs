@@ -1,3 +1,4 @@
+use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::ProgramContext;
 use crate::math_utils::signed_felt;
 use crate::stdlib::{any::Any, borrow::Cow, collections::HashMap, prelude::*};
 #[cfg(feature = "extensive_hints")]
@@ -455,12 +456,13 @@ impl VirtualMachine {
         &mut self,
         hint_processor: &mut dyn HintProcessor,
         exec_scopes: &mut ExecutionScopes,
+        program_context: &ProgramContext,
         hint_datas: &[Box<dyn Any>],
         constants: &HashMap<String, Felt252>,
     ) -> Result<(), VirtualMachineError> {
         for (hint_index, hint_data) in hint_datas.iter().enumerate() {
             hint_processor
-                .execute_hint(self, exec_scopes, hint_data, constants)
+                .execute_hint(self, exec_scopes, program_context, hint_data, constants)
                 .map_err(|err| VirtualMachineError::Hint(Box::new((hint_index, err))))?
         }
         Ok(())
@@ -471,6 +473,7 @@ impl VirtualMachine {
         &mut self,
         hint_processor: &mut dyn HintProcessor,
         exec_scopes: &mut ExecutionScopes,
+        program_context: &ProgramContext,
         hint_datas: &mut Vec<Box<dyn Any>>,
         hint_ranges: &mut HashMap<Relocatable, HintRange>,
         constants: &HashMap<String, Felt252>,
@@ -485,6 +488,7 @@ impl VirtualMachine {
                     .execute_hint_extensive(
                         self,
                         exec_scopes,
+                        program_context,
                         hint_datas.get(idx).ok_or(VirtualMachineError::Unexpected)?,
                         constants,
                     )
@@ -544,17 +548,16 @@ impl VirtualMachine {
         &mut self,
         hint_processor: &mut dyn HintProcessor,
         exec_scopes: &mut ExecutionScopes,
+        program_context: &ProgramContext,
         #[cfg(feature = "extensive_hints")] hint_datas: &mut Vec<Box<dyn Any>>,
         #[cfg(not(feature = "extensive_hints"))] hint_datas: &[Box<dyn Any>],
-        #[cfg(feature = "extensive_hints")] hint_ranges: &mut HashMap<Relocatable, HintRange>,
         constants: &HashMap<String, Felt252>,
     ) -> Result<(), VirtualMachineError> {
         self.step_hint(
             hint_processor,
             exec_scopes,
+            program_context,
             hint_datas,
-            #[cfg(feature = "extensive_hints")]
-            hint_ranges,
             constants,
         )?;
 
@@ -2732,6 +2735,7 @@ mod tests {
             vm.step(
                 &mut hint_processor,
                 exec_scopes_ref!(),
+                &ProgramContext::default(),
                 &mut Vec::new(),
                 #[cfg(feature = "extensive_hints")]
                 &mut HashMap::new(),
@@ -2963,6 +2967,7 @@ mod tests {
             vm.step(
                 &mut hint_processor,
                 exec_scopes_ref!(),
+                &ProgramContext::default(),
                 &mut Vec::new(),
                 #[cfg(feature = "extensive_hints")]
                 &mut HashMap::new(),
@@ -3047,6 +3052,7 @@ mod tests {
                 vm.step(
                     &mut hint_processor,
                     exec_scopes_ref!(),
+                    &ProgramContext::default(),
                     &mut Vec::new(),
                     #[cfg(feature = "extensive_hints")]
                     &mut HashMap::new(),
@@ -3151,6 +3157,7 @@ mod tests {
             vm.step(
                 &mut hint_processor,
                 exec_scopes_ref!(),
+                &ProgramContext::default(),
                 &mut Vec::new(),
                 #[cfg(feature = "extensive_hints")]
                 &mut HashMap::new(),
@@ -3174,6 +3181,7 @@ mod tests {
             vm.step(
                 &mut hint_processor,
                 exec_scopes_ref!(),
+                &ProgramContext::default(),
                 &mut Vec::new(),
                 #[cfg(feature = "extensive_hints")]
                 &mut HashMap::new(),
@@ -3198,6 +3206,7 @@ mod tests {
             vm.step(
                 &mut hint_processor,
                 exec_scopes_ref!(),
+                &ProgramContext::default(),
                 &mut Vec::new(),
                 #[cfg(feature = "extensive_hints")]
                 &mut HashMap::new(),
@@ -3770,6 +3779,7 @@ mod tests {
                 vm.step(
                     &mut hint_processor,
                     exec_scopes_ref!(),
+                    &ProgramContext::default(),
                     &mut hint_data,
                     #[cfg(feature = "extensive_hints")]
                     &mut HashMap::from([(
@@ -4409,6 +4419,7 @@ mod tests {
             vm.step(
                 &mut hint_processor,
                 exec_scopes_ref!(),
+                &ProgramContext::default(),
                 &mut Vec::new(),
                 #[cfg(feature = "extensive_hints")]
                 &mut HashMap::new(),
@@ -4496,6 +4507,7 @@ mod tests {
                 vm.step(
                     &mut hint_processor,
                     exec_scopes_ref!(),
+                    &ProgramContext::default(),
                     &mut Vec::new(),
                     #[cfg(feature = "extensive_hints")]
                     &mut HashMap::new(),

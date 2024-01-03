@@ -292,7 +292,9 @@ mod tests {
     use crate::{
         hint_processor::{
             builtin_hint_processor::{
-                builtin_hint_processor_definition::{BuiltinHintProcessor, HintProcessorData},
+                builtin_hint_processor_definition::{
+                    BuiltinHintProcessor, HintProcessorData, ProgramContext,
+                },
                 hint_code,
                 keccak_utils::HashMap,
             },

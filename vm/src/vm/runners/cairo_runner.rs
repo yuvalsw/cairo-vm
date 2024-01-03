@@ -13,6 +13,7 @@ use crate::{
     },
 };
 
+use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::ProgramContext;
 use crate::vm::runners::cairo_pie::CAIRO_PIE_VERSION;
 use crate::Felt252;
 use crate::{
@@ -601,6 +602,12 @@ impl CairoRunner {
             .collect()
     }
 
+    fn get_program_context(&self) -> ProgramContext {
+        ProgramContext {
+            identifiers: self.program.shared_program_data.identifiers.clone(),
+        }
+    }
+
     pub fn get_constants(&self) -> &HashMap<String, Felt252> {
         &self.program.constants
     }
@@ -616,6 +623,7 @@ impl CairoRunner {
         hint_processor: &mut dyn HintProcessor,
     ) -> Result<(), VirtualMachineError> {
         let references = &self.program.shared_program_data.reference_manager;
+        let program_context = self.get_program_context();
         #[cfg(not(feature = "extensive_hints"))]
         let hint_data = self.get_hint_data(references, hint_processor)?;
         #[cfg(feature = "extensive_hints")]
@@ -633,6 +641,7 @@ impl CairoRunner {
             vm.step(
                 hint_processor,
                 &mut self.exec_scopes,
+                &program_context,
                 #[cfg(feature = "extensive_hints")]
                 &mut hint_data,
                 #[cfg(not(feature = "extensive_hints"))]
@@ -667,6 +676,7 @@ impl CairoRunner {
         hint_processor: &mut dyn HintProcessor,
     ) -> Result<(), VirtualMachineError> {
         let references = &self.program.shared_program_data.reference_manager;
+        let program_context = self.get_program_context();
         #[cfg(not(feature = "extensive_hints"))]
         let hint_data = self.get_hint_data(references, hint_processor)?;
         #[cfg(feature = "extensive_hints")]
@@ -697,6 +707,7 @@ impl CairoRunner {
             vm.step(
                 hint_processor,
                 &mut self.exec_scopes,
+                &program_context,
                 #[cfg(feature = "extensive_hints")]
                 &mut hint_data,
                 #[cfg(not(feature = "extensive_hints"))]

@@ -482,18 +482,27 @@ pub mod test_utils {
     macro_rules! run_hint {
         ($vm:expr, $ids_data:expr, $hint_code:expr, $exec_scopes:expr, $constants:expr) => {{
             let hint_data = HintProcessorData::new_default($hint_code.to_string(), $ids_data);
+            let mut program_context = ProgramContext::default();
             let mut hint_processor = BuiltinHintProcessor::new_empty();
-            hint_processor.execute_hint(&mut $vm, $exec_scopes, &any_box!(hint_data), $constants)
+            hint_processor.execute_hint(
+                &mut $vm,
+                $exec_scopes,
+                &mut program_context,
+                &any_box!(hint_data),
+                $constants,
+            )
         }};
         ($vm:expr, $ids_data:expr, $hint_code:expr, $exec_scopes:expr) => {{
             let hint_data = HintProcessorData::new_default(
                 crate::stdlib::string::ToString::to_string($hint_code),
                 $ids_data,
             );
+            let mut program_context = ProgramContext::default();
             let mut hint_processor = BuiltinHintProcessor::new_empty();
             hint_processor.execute_hint(
                 &mut $vm,
                 $exec_scopes,
+                &mut program_context,
                 &any_box!(hint_data),
                 &crate::stdlib::collections::HashMap::new(),
             )
@@ -503,10 +512,12 @@ pub mod test_utils {
                 crate::stdlib::string::ToString::to_string($hint_code),
                 $ids_data,
             );
+            let mut program_context = ProgramContext::default();
             let mut hint_processor = BuiltinHintProcessor::new_empty();
             hint_processor.execute_hint(
                 &mut $vm,
                 exec_scopes_ref!(),
+                &mut program_context,
                 &any_box!(hint_data),
                 &crate::stdlib::collections::HashMap::new(),
             )
@@ -659,7 +670,9 @@ mod test {
     use crate::{
         hint_processor::{
             builtin_hint_processor::{
-                builtin_hint_processor_definition::{BuiltinHintProcessor, HintProcessorData},
+                builtin_hint_processor_definition::{
+                    BuiltinHintProcessor, HintProcessorData, ProgramContext,
+                },
                 dict_manager::{DictManager, DictTracker},
             },
             hint_processor_definition::HintReference,

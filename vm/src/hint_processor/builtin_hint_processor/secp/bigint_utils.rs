@@ -186,7 +186,7 @@ pub fn hi_max_bitlen(
 mod tests {
     use super::*;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::{
-        BuiltinHintProcessor, HintProcessorData,
+        BuiltinHintProcessor, HintProcessorData, ProgramContext,
     };
     use crate::hint_processor::hint_processor_definition::HintProcessorLogic;
     use crate::stdlib::string::ToString;

@@ -75,8 +75,9 @@ pub fn ed25519_is_zero_assign_scope_vars(
 #[cfg(test)]
 mod test {
     use crate::any_box;
-    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
-    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData;
+    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::{
+        BuiltinHintProcessor, HintProcessorData, ProgramContext,
+    };
     use crate::hint_processor::builtin_hint_processor::hint_code;
     use crate::hint_processor::builtin_hint_processor::secp::secp_utils::SECP_P_V2;
     use crate::hint_processor::hint_processor_definition::HintProcessorLogic;

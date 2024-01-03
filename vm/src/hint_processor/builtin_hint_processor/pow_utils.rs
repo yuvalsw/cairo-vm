@@ -41,8 +41,9 @@ mod tests {
     use crate::{
         any_box,
         hint_processor::{
-            builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor,
-            builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData,
+            builtin_hint_processor::builtin_hint_processor_definition::{
+                BuiltinHintProcessor, HintProcessorData, ProgramContext,
+            },
             hint_processor_definition::HintProcessorLogic,
         },
         types::{exec_scope::ExecutionScopes, relocatable::MaybeRelocatable},

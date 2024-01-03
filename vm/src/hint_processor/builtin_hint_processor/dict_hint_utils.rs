@@ -255,8 +255,9 @@ pub fn dict_squash_update_ptr(
 mod tests {
     use super::*;
     use crate::any_box;
-    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
-    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData;
+    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::{
+        BuiltinHintProcessor, HintProcessorData, ProgramContext,
+    };
     use crate::hint_processor::builtin_hint_processor::dict_manager::Dictionary;
     use crate::hint_processor::builtin_hint_processor::hint_code;
     use crate::hint_processor::hint_processor_definition::HintProcessorLogic;

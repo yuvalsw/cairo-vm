@@ -443,8 +443,9 @@ pub fn assert_program_address(
 
 #[cfg(test)]
 mod tests {
-    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
-    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData;
+    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::{
+        BuiltinHintProcessor, HintProcessorData, ProgramContext,
+    };
     use crate::hint_processor::builtin_hint_processor::hint_code;
     use crate::hint_processor::builtin_hint_processor::hint_utils::{
         get_integer_from_var_name, get_maybe_relocatable_from_var_name,
@@ -794,6 +795,7 @@ mod tests {
             hint_processor.execute_hint(
                 &mut vm,
                 &mut exec_scopes,
+                &ProgramContext::default(),
                 &any_box!(hint_data),
                 &HashMap::new(),
             ),
@@ -842,6 +844,7 @@ mod tests {
             hint_processor.execute_hint(
                 &mut vm,
                 &mut exec_scopes,
+                &ProgramContext::default(),
                 &any_box!(hint_data),
                 &HashMap::new(),
             ),
@@ -936,6 +939,7 @@ mod tests {
             hint_processor.execute_hint(
                 &mut vm,
                 &mut exec_scopes,
+                &ProgramContext::default(),
                 &any_box!(hint_data),
                 &HashMap::new(),
             ),
