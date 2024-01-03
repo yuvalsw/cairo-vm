@@ -642,14 +642,14 @@ mod test {
         assert_eq!(cairo_pie.memory.len(), 88);
         // Check a few values
         assert_eq!(
-            cairo_pie.memory[0],
+            cairo_pie.memory.0[0],
             (
                 (0usize, 0usize),
                 MaybeRelocatable::Int(Felt252::from(290341444919459839u64))
             )
         );
         assert_eq!(
-            cairo_pie.memory[cairo_pie.memory.len() - 1],
+            cairo_pie.memory.0[cairo_pie.memory.len() - 1],
             (
                 (1usize, 60usize),
                 MaybeRelocatable::RelocatableValue(Relocatable::from((2, 2)))
