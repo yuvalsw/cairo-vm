@@ -204,19 +204,16 @@ fn check_cairo_pie_builtin_usage(
     return_builtins_addr: &Relocatable,
     pre_execution_builtins_addr: &Relocatable,
 ) -> Result<(), HintError> {
-    let return_builtin_value = memory
-        .get_integer(return_builtins_addr + builtin_index)?
-        .into_owned();
-    let pre_execution_builtin_value = memory
-        .get_integer(pre_execution_builtins_addr + builtin_index)?
-        .into_owned();
-    let expected_builtin_size = return_builtin_value - pre_execution_builtin_value;
+    let return_builtin_value = memory.get_relocatable(return_builtins_addr + builtin_index)?;
+    let pre_execution_builtin_value =
+        memory.get_relocatable(pre_execution_builtins_addr + builtin_index)?;
+    let expected_builtin_size = (return_builtin_value - pre_execution_builtin_value)?;
 
     let builtin_name = builtin
         .name()
         .strip_suffix("_builtin")
         .unwrap_or(builtin.name());
-    let builtin_size = Felt252::from(cairo_pie.metadata.builtin_segments[builtin_name].size);
+    let builtin_size = cairo_pie.metadata.builtin_segments[builtin_name].size;
 
     if builtin_size != expected_builtin_size {
         return Err(HintError::AssertionFailed(
@@ -244,9 +241,7 @@ fn write_return_builtins(
     let mut used_builtin_offset: usize = 0;
     for (index, builtin) in ALL_BUILTINS.iter().enumerate() {
         if used_builtins.contains(builtin) {
-            let builtin_value = memory
-                .get_integer(used_builtins_addr + used_builtin_offset)?
-                .into_owned();
+            let builtin_value = memory.get_relocatable(used_builtins_addr + used_builtin_offset)?;
             memory.insert_value(return_builtins_addr + index, builtin_value)?;
             used_builtin_offset += 1;
 
@@ -492,15 +487,13 @@ mod tests {
     use assert_matches::assert_matches;
     use rstest::{fixture, rstest};
 
-    use crate::Felt252;
-
     use crate::any_box;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData;
     use crate::hint_processor::builtin_hint_processor::hint_code;
     use crate::hint_processor::builtin_hint_processor::hint_utils::get_ptr_from_var_name;
     use crate::hint_processor::hint_processor_definition::HintProcessorLogic;
-    use crate::types::relocatable::Relocatable;
+    use crate::types::relocatable::{MaybeRelocatable, Relocatable};
     use crate::utils::test_utils::*;
     use crate::vm::runners::builtin_runner::{BuiltinRunner, OutputBuiltinRunner};
     use crate::vm::runners::cairo_pie::{BuiltinAdditionalData, CairoPie, PublicMemoryPage};
@@ -762,16 +755,16 @@ mod tests {
         // are used by the field arithmetic program. Note that the used builtins list
         // does not contain empty elements (i.e. offsets are 8 and 9 instead of 10 and 12).
         vm.segments = segments![
-            ((1, 0), 1),
-            ((1, 1), 2),
-            ((1, 2), 3),
-            ((1, 3), 4),
-            ((1, 4), 5),
-            ((1, 5), 6),
-            ((1, 6), 7),
-            ((1, 7), 8),
-            ((1, 8), 30),
-            ((1, 9), 50),
+            ((1, 0), (2, 1)),
+            ((1, 1), (2, 2)),
+            ((1, 2), (2, 3)),
+            ((1, 3), (2, 4)),
+            ((1, 4), (2, 5)),
+            ((1, 5), (2, 6)),
+            ((1, 6), (2, 7)),
+            ((1, 7), (2, 8)),
+            ((1, 8), (2, 30)),
+            ((1, 9), (2, 50)),
             ((1, 24), (1, 8)),
         ];
         vm.run_context.fp = 25;
@@ -797,12 +790,21 @@ mod tests {
         let return_builtins = vm
             .segments
             .memory
-            .get_integer_range(Relocatable::from((1, 16)), 8)
+            .get_continuous_range(Relocatable::from((1, 16)), 8)
             .expect("Return builtin was not properly written to memory.");
 
-        let expected_builtins = vec![1, 2, 30, 4, 50, 6, 7, 8];
+        let expected_builtins = vec![
+            Relocatable::from((2, 1)),
+            Relocatable::from((2, 2)),
+            Relocatable::from((2, 30)),
+            Relocatable::from((2, 4)),
+            Relocatable::from((2, 50)),
+            Relocatable::from((2, 6)),
+            Relocatable::from((2, 7)),
+            Relocatable::from((2, 8)),
+        ];
         for (expected, actual) in std::iter::zip(expected_builtins, return_builtins) {
-            assert_eq!(Felt252::from(expected), actual.into_owned());
+            assert_eq!(MaybeRelocatable::RelocatableValue(expected), actual);
         }
 
         // Check that the exec scope changed
