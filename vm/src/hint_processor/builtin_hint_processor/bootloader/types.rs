@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use crate::serde::deserialize_program::deserialize_and_parse_program;
 use crate::types::errors::program_errors::ProgramError;
+
 use crate::types::program::Program;
 use crate::vm::runners::cairo_pie::{CairoPie, StrippedProgram};
 
@@ -81,14 +82,14 @@ impl TaskSpec {
     }
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SimpleBootloaderInput {
     pub fact_topologies_path: Option<PathBuf>,
     pub single_page: bool,
     pub tasks: Vec<TaskSpec>,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BootloaderInput {
     pub simple_bootloader_input: SimpleBootloaderInput,
     pub bootloader_config: BootloaderConfig,

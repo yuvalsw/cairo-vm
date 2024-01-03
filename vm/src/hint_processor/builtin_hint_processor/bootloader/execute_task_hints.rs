@@ -6,9 +6,11 @@ use starknet_crypto::FieldElement;
 
 use crate::Felt252;
 
+use crate::any_box;
 use crate::hint_processor::builtin_hint_processor::bootloader::fact_topologies::{
     get_program_task_fact_topology, FactTopology,
 };
+use crate::hint_processor::builtin_hint_processor::bootloader::load_cairo_pie::load_cairo_pie;
 use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::compute_program_hash_chain;
 use crate::hint_processor::builtin_hint_processor::bootloader::program_loader::ProgramLoader;
 use crate::hint_processor::builtin_hint_processor::bootloader::types::{BootloaderVersion, Task};
@@ -53,6 +55,11 @@ pub fn allocate_program_data_segment(
     Ok(())
 }
 
+fn field_element_to_felt(field_element: FieldElement) -> Felt252 {
+    let bytes = field_element.to_bytes_be();
+    Felt252::from_bytes_be(&bytes)
+}
+
 /// Implements
 ///
 /// from starkware.cairo.bootloaders.simple_bootloader.utils import load_program
@@ -91,11 +98,6 @@ pub fn load_program_hint(
     exec_scopes.insert_value(vars::PROGRAM_ADDRESS, loaded_program.code_address);
 
     Ok(())
-}
-
-fn field_element_to_felt(field_element: FieldElement) -> Felt252 {
-    let bytes = field_element.to_bytes_be();
-    Felt252::from_bytes_be(&bytes)
 }
 
 /// Implements
@@ -338,13 +340,166 @@ pub fn write_return_builtins_hint(
     Ok(())
 }
 
+/*
+Implements hint:
+%{
+    "from starkware.cairo.bootloaders.simple_bootloader.objects import (
+        CairoPieTask,
+        RunProgramTask,
+        Task,
+    )
+    from starkware.cairo.bootloaders.simple_bootloader.utils import (
+        load_cairo_pie,
+        prepare_output_runner,
+    )
+
+    assert isinstance(task, Task)
+    n_builtins = len(task.get_program().builtins)
+    new_task_locals = {}
+    if isinstance(task, RunProgramTask):
+        new_task_locals['program_input'] = task.program_input
+        new_task_locals['WITH_BOOTLOADER'] = True
+
+        vm_load_program(task.program, program_address)
+    elif isinstance(task, CairoPieTask):
+        ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
+        load_cairo_pie(
+            task=task.cairo_pie, memory=memory, segments=segments,
+            program_address=program_address, execution_segment_address= ap - n_builtins,
+            builtin_runners=builtin_runners, ret_fp=fp, ret_pc=ret_pc)
+    else:
+        raise NotImplementedError(f'Unexpected task type: {type(task).__name__}.')
+
+    output_runner_data = prepare_output_runner(
+        task=task,
+        output_builtin=output_builtin,
+        output_ptr=ids.pre_execution_builtin_ptrs.output)
+    vm_enter_scope(new_task_locals)"
+%}
+*/
+pub fn call_task(
+    vm: &mut VirtualMachine,
+    exec_scopes: &mut ExecutionScopes,
+    ids_data: &HashMap<String, HintReference>,
+    ap_tracking: &ApTracking,
+) -> Result<(), HintError> {
+    // assert isinstance(task, Task)
+    let task: Task = exec_scopes.get(vars::TASK)?;
+
+    // n_builtins = len(task.get_program().builtins)
+    let num_builtins = get_program_from_task(&task)?.builtins.len();
+
+    let mut new_task_locals = HashMap::new();
+
+    // TODO: remove clone here when RunProgramTask has proper variant data (not String)
+    match &task {
+        // if isinstance(task, RunProgramTask):
+        Task::Program(_program) => {
+            let program_input = HashMap::<String, Box<dyn Any>>::new();
+            // new_task_locals['program_input'] = task.program_input
+            new_task_locals.insert("program_input".to_string(), any_box![program_input]);
+            // new_task_locals['WITH_BOOTLOADER'] = True
+            new_task_locals.insert("WITH_BOOTLOADER".to_string(), any_box![true]);
+
+            // TODO: the content of this function is mostly useless for the Rust VM.
+            //       check with SW if there is nothing of interest here.
+            // vm_load_program(task.program, program_address)
+        }
+        // elif isinstance(task, CairoPieTask):
+        Task::Pie(cairo_pie) => {
+            let program_address: Relocatable = exec_scopes.get("program_address")?;
+
+            // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
+            // load_cairo_pie(
+            //     task=task.cairo_pie, memory=memory, segments=segments,
+            //     program_address=program_address, execution_segment_address= ap - n_builtins,
+            //     builtin_runners=builtin_runners, ret_fp=fp, ret_pc=ret_pc)
+            load_cairo_pie(
+                cairo_pie,
+                vm,
+                program_address,
+                (vm.get_ap() - num_builtins)?,
+                vm.get_fp(),
+                vm.get_pc(),
+            )
+            .map_err(Into::<HintError>::into)?;
+        }
+    }
+
+    // output_runner_data = prepare_output_runner(
+    //     task=task,
+    //     output_builtin=output_builtin,
+    //     output_ptr=ids.pre_execution_builtin_ptrs.output)
+    let pre_execution_builtin_ptrs_addr =
+        get_relocatable_from_var_name(vars::PRE_EXECUTION_BUILTIN_PTRS, vm, ids_data, ap_tracking)?;
+    let output = vm
+        .get_integer(pre_execution_builtin_ptrs_addr)?
+        .into_owned();
+    let output_ptr = output
+        .to_usize()
+        .ok_or(MathError::Felt252ToUsizeConversion(Box::new(output)))?;
+    let output_runner_data =
+        util::prepare_output_runner(&task, vm.get_output_builtin()?, output_ptr)?;
+
+    exec_scopes.insert_box(vars::OUTPUT_RUNNER_DATA, any_box!(output_runner_data));
+
+    exec_scopes.enter_scope(new_task_locals);
+
+    Ok(())
+}
+
+mod util {
+    use crate::vm::runners::{
+        builtin_runner::OutputBuiltinRunner,
+        cairo_pie::{BuiltinAdditionalData, OutputBuiltinAdditionalData},
+    };
+
+    // TODO: clean up / organize
+    use super::*;
+
+    /// Prepares the output builtin if the type of task is Task, so that pages of the inner program
+    /// will be recorded separately.
+    /// If the type of task is CairoPie, nothing should be done, as the program does not contain
+    /// hints that may affect the output builtin.
+    /// The return value of this function should be later passed to get_task_fact_topology().
+    pub(crate) fn prepare_output_runner(
+        task: &Task,
+        output_builtin: &mut OutputBuiltinRunner,
+        output_ptr: usize,
+    ) -> Result<Option<OutputBuiltinAdditionalData>, HintError> {
+        return match task {
+            Task::Program(_) => {
+                let output_state = match output_builtin.get_additional_data() {
+                    BuiltinAdditionalData::Output(output_state) => Ok(output_state),
+                    _ => Err(HintError::CustomHint(
+                        "output_builtin's additional data is not type Output"
+                            .to_string()
+                            .into_boxed_str(),
+                    )),
+                }?;
+                output_builtin.base = output_ptr;
+                Ok(Some(output_state))
+            }
+            Task::Pie(_) => Ok(None),
+        };
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
+    use assert_matches::assert_matches;
     use rstest::{fixture, rstest};
 
     use crate::Felt252;
 
+    use crate::any_box;
+    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
+    use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData;
+    use crate::hint_processor::builtin_hint_processor::hint_code;
     use crate::hint_processor::builtin_hint_processor::hint_utils::get_ptr_from_var_name;
+    use crate::hint_processor::hint_processor_definition::HintProcessorLogic;
     use crate::types::relocatable::Relocatable;
     use crate::utils::test_utils::*;
     use crate::vm::runners::builtin_runner::{BuiltinRunner, OutputBuiltinRunner};
@@ -400,6 +555,13 @@ mod tests {
     }
 
     #[fixture]
+    fn fibonacci_pie() -> CairoPie {
+        let pie_file =
+            Path::new("../cairo_programs/manually_compiled/fibonacci_cairo_pie/fibonacci_pie.zip");
+        CairoPie::from_file(pie_file).expect("Failed to load the program PIE")
+    }
+
+    #[fixture]
     fn field_arithmetic_program() -> Program {
         let program_content =
             include_bytes!("../../../../../cairo_programs/field_arithmetic.json").to_vec();
@@ -445,6 +607,80 @@ mod tests {
             vm.segments.segment_sizes[&(program_address.segment_index as usize)],
             expected_program_size
         );
+    }
+
+    #[rstest]
+    fn test_call_task(fibonacci: Program) {
+        let mut vm = vm!();
+
+        // Allocate space for pre-execution (8 felts), which mimics the `BuiltinData` struct in the
+        // Bootloader's Cairo code. Our code only uses the first felt (`output` field in the struct)
+        vm.segments = segments![((1, 0), 0)];
+        vm.run_context.fp = 8;
+        add_segments!(vm, 1);
+
+        let ids_data = non_continuous_ids_data![(vars::PRE_EXECUTION_BUILTIN_PTRS, -8)];
+
+        let mut exec_scopes = ExecutionScopes::new();
+
+        let mut output_builtin = OutputBuiltinRunner::new(true);
+        output_builtin.initialize_segments(&mut vm.segments);
+        vm.builtin_runners
+            .push(BuiltinRunner::Output(output_builtin));
+
+        let task = Task::Program(fibonacci);
+        exec_scopes.insert_box(vars::TASK, Box::new(task));
+
+        assert_matches!(
+            run_hint!(
+                vm,
+                ids_data.clone(),
+                hint_code::EXECUTE_TASK_CALL_TASK,
+                &mut exec_scopes
+            ),
+            Ok(())
+        );
+    }
+
+    #[rstest]
+    fn test_call_cairo_pie_task(fibonacci_pie: CairoPie) {
+        let mut vm = vm!();
+
+        // We set the program header pointer at (1, 0) and make it point to the start of segment #2.
+        // Allocate space for pre-execution (8 values), which follows the `BuiltinData` struct in
+        // the Bootloader Cairo code. Our code only uses the first felt (`output` field in the
+        // struct). Finally, we put the mocked output of `select_input_builtins` in the next
+        // memory address and increase the AP register accordingly.
+        vm.segments = segments![((1, 0), (2, 0)), ((1, 1), 42), ((1, 9), (4, 0))];
+        vm.run_context.ap = 10;
+        vm.run_context.fp = 9;
+        add_segments!(vm, 3);
+
+        let program_header_ptr = Relocatable::from((2, 0));
+        let ids_data = non_continuous_ids_data![
+            ("program_header", -9),
+            (vars::PRE_EXECUTION_BUILTIN_PTRS, -8),
+        ];
+        let ap_tracking = ApTracking::new();
+
+        let mut exec_scopes = ExecutionScopes::new();
+
+        let mut output_builtin = OutputBuiltinRunner::new(true);
+        output_builtin.initialize_segments(&mut vm.segments);
+        vm.builtin_runners
+            .push(BuiltinRunner::Output(output_builtin));
+
+        let task = Task::Pie(fibonacci_pie);
+        exec_scopes.insert_value(vars::TASK, task);
+        exec_scopes.insert_value(vars::PROGRAM_DATA_BASE, program_header_ptr.clone());
+
+        // Load the program in memory
+        load_program_hint(&mut vm, &mut exec_scopes, &ids_data, &ap_tracking)
+            .expect("Failed to load Cairo PIE task in the VM memory");
+
+        // Execute it
+        call_task(&mut vm, &mut exec_scopes, &ids_data, &ap_tracking)
+            .expect("Hint failed unexpectedly");
     }
 
     #[rstest]
