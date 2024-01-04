@@ -18,8 +18,9 @@ use crate::hint_processor::builtin_hint_processor::hint_utils::{
     get_ptr_from_var_name, get_relocatable_from_var_name, insert_value_from_var_name,
 };
 use crate::hint_processor::hint_processor_definition::HintReference;
-use crate::serde::deserialize_program::{ApTracking, BuiltinName};
+use crate::serde::deserialize_program::{ApTracking, BuiltinName, Identifier};
 use crate::types::exec_scope::ExecutionScopes;
+use crate::types::program::Program;
 use crate::types::relocatable::Relocatable;
 use crate::vm::errors::hint_errors::HintError;
 use crate::vm::errors::memory_errors::MemoryError;
@@ -329,6 +330,33 @@ pub fn write_return_builtins_hint(
     Ok(())
 }
 
+fn get_bootloader_program(exec_scopes: &ExecutionScopes) -> Result<&Program, HintError> {
+    if let Some(boxed_program) = exec_scopes.data[0].get(vars::BOOTLOADER_PROGRAM) {
+        if let Some(program) = boxed_program.downcast_ref::<Program>() {
+            return Ok(program);
+        }
+    }
+
+    Err(HintError::VariableNotInScopeError(
+        vars::BOOTLOADER_PROGRAM.to_string().into_boxed_str(),
+    ))
+}
+
+fn get_identifier(
+    identifiers: &HashMap<String, Identifier>,
+    name: &str,
+) -> Result<usize, HintError> {
+    if let Some(identifier) = identifiers.get(name) {
+        if let Some(pc) = identifier.pc {
+            return Ok(pc);
+        }
+    }
+
+    Err(HintError::VariableNotInScopeError(
+        name.to_string().into_boxed_str(),
+    ))
+}
+
 /*
 Implements hint:
 %{
@@ -381,7 +409,6 @@ pub fn call_task(
 
     let mut new_task_locals = HashMap::new();
 
-    // TODO: remove clone here when RunProgramTask has proper variant data (not String)
     match &task {
         // if isinstance(task, RunProgramTask):
         Task::Program(_program) => {
@@ -400,14 +427,16 @@ pub fn call_task(
             let program_address: Relocatable = exec_scopes.get("program_address")?;
 
             // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
-            // TODO: we hardcode the return PC for now, we need a way to access the program
-            //       identifiers to compute this correctly
-            let ret_pc = Relocatable::from((0, 285));
-            // let ret_pc_label = get_ptr_from_var_name("ret_pc_label", vm, ids_data, ap_tracking)?;
-            // let call_task = get_ptr_from_var_name("call_task", vm, ids_data, ap_tracking)?;
-            //
-            // let ret_pc = (ret_pc_label - call_task)?;
-            // let ret_pc = (vm.run_context.pc + ret_pc)?;
+            let program = get_bootloader_program(exec_scopes)?;
+            let identifiers = &program.shared_program_data.identifiers;
+            let ret_pc_label = get_identifier(identifiers, "starkware.cairo.bootloaders.simple_bootloader.execute_task.execute_task.ret_pc_label")?;
+            let call_task = get_identifier(
+                identifiers,
+                "starkware.cairo.bootloaders.simple_bootloader.execute_task.execute_task.call_task",
+            )?;
+
+            let ret_pc_offset = ret_pc_label - call_task;
+            let ret_pc = (vm.run_context.pc + ret_pc_offset)?;
 
             // load_cairo_pie(
             //     task=task.cairo_pie, memory=memory, segments=segments,
