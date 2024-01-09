@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use zip::read::ZipFile;
 
 use super::cairo_runner::ExecutionResources;
-use crate::serde::deserialize_utils::deserialize_biguint_from_number;
+use crate::serde::deserialize_program::deserialize_biguint_from_number;
 use crate::types::errors::cairo_pie_error::{CairoPieError, DeserializeMemoryError};
 use crate::{
     serde::deserialize_program::BuiltinName,
@@ -224,6 +224,7 @@ pub struct CairoPieVersion {
 }
 
 mod serde_impl {
+    use crate::serde::deserialize_program::felt_from_number;
     use crate::{types::relocatable::MaybeRelocatable, Felt252};
     use num_bigint::BigUint;
     use num_traits::Num;
@@ -231,8 +232,6 @@ mod serde_impl {
     use serde::{de, ser::SerializeSeq, Deserializer, Serialize, Serializer};
     use serde_json::Number;
     use std::fmt;
-
-    use crate::serde::deserialize_utils::felt_from_number;
 
     use crate::utils::CAIRO_PRIME;
 
