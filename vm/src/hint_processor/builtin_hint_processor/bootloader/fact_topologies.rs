@@ -384,13 +384,10 @@ pub fn get_task_fact_topology(
             }
             let additional_data = cairo_pie
                 .additional_data
-                .get("output_builtin")
+                .output_builtin
+                .as_ref()
                 .ok_or(FactTopologyError::CairoPieHasNoOutputBuiltinData)?;
-            let additional_data = match additional_data {
-                BuiltinAdditionalData::Output(output_builtin_data) => output_builtin_data,
-                _ => return Err(FactTopologyError::CairoPieHasNoOutputBuiltinData),
-            };
-            get_fact_topology_from_additional_data(output_size, additional_data)
+            get_fact_topology_from_additional_data(output_size, &additional_data)
         }
     }
 }

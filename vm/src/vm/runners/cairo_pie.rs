@@ -9,6 +9,9 @@ use super::cairo_runner::ExecutionResources;
 use crate::serde::deserialize_utils::deserialize_biguint_from_number;
 use crate::stdlib::prelude::{String, Vec};
 use crate::types::errors::cairo_pie_error::{CairoPieError, DeserializeMemoryError};
+use crate::vm::runners::builtin_runner::{
+    HASH_BUILTIN_NAME, OUTPUT_BUILTIN_NAME, SIGNATURE_BUILTIN_NAME,
+};
 use crate::{
     serde::deserialize_program::BuiltinName,
     stdlib::{collections::HashMap, prelude::*},
@@ -79,12 +82,54 @@ pub enum BuiltinAdditionalData {
     None,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct AdditionalData {
+    pub output_builtin: Option<OutputBuiltinAdditionalData>,
+    pub pedersen_builtin: Option<Vec<Relocatable>>,
+    #[serde(flatten)]
+    pub ecdsa_builtin: Option<HashMap<Relocatable, (Felt252, Felt252)>>,
+    pub range_check_builtin: Option<()>,
+}
+
+impl AdditionalData {
+    pub fn is_empty(&self) -> bool {
+        self.output_builtin.is_none()
+            && self.pedersen_builtin.is_none()
+            && self.ecdsa_builtin.is_none()
+            && self.range_check_builtin.is_none()
+    }
+}
+
+impl From<HashMap<String, BuiltinAdditionalData>> for AdditionalData {
+    fn from(mut value: HashMap<String, BuiltinAdditionalData>) -> Self {
+        let output_builtin_data = match value.remove(OUTPUT_BUILTIN_NAME) {
+            Some(BuiltinAdditionalData::Output(output_data)) => Some(output_data),
+            _ => None,
+        };
+        let ecdsa_builtin_data = match value.remove(SIGNATURE_BUILTIN_NAME) {
+            Some(BuiltinAdditionalData::Signature(signature_data)) => Some(signature_data),
+            _ => None,
+        };
+        let pedersen_builtin_data = match value.remove(HASH_BUILTIN_NAME) {
+            Some(BuiltinAdditionalData::Hash(pedersen_data)) => Some(pedersen_data),
+            _ => None,
+        };
+
+        Self {
+            output_builtin: output_builtin_data,
+            ecdsa_builtin: ecdsa_builtin_data,
+            pedersen_builtin: pedersen_builtin_data,
+            range_check_builtin: None,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CairoPie {
     pub metadata: CairoPieMetadata,
     pub memory: CairoPieMemory,
     pub execution_resources: ExecutionResources,
-    pub additional_data: HashMap<String, BuiltinAdditionalData>,
+    pub additional_data: AdditionalData,
     pub version: CairoPieVersion,
 }
 
@@ -173,8 +218,7 @@ impl CairoPie {
         let metadata: CairoPieMetadata = parse_zip_file(zip.by_name("metadata.json")?)?;
         let execution_resources: ExecutionResources =
             parse_zip_file(zip.by_name("execution_resources.json")?)?;
-        let additional_data: HashMap<String, BuiltinAdditionalData> =
-            parse_zip_file(zip.by_name("additional_data.json")?)?;
+        let additional_data: AdditionalData = parse_zip_file(zip.by_name("additional_data.json")?)?;
         let version: CairoPieVersion = parse_zip_file(zip.by_name("version.json")?)?;
 
         let addr_size: usize = 8;
@@ -497,6 +541,7 @@ mod serde_impl {
 mod test {
     use super::*;
     use crate::utils::CAIRO_PRIME;
+    use assert_matches::assert_matches;
     use rstest::rstest;
     use std::fs::File;
 
@@ -658,16 +703,55 @@ mod test {
 
         assert_eq!(
             cairo_pie.additional_data,
-            HashMap::from([(
-                "output_builtin".to_string(),
-                BuiltinAdditionalData::Output(OutputBuiltinAdditionalData {
+            AdditionalData {
+                output_builtin: Some(OutputBuiltinAdditionalData {
                     base: 0,
                     pages: Default::default(),
                     attributes: Default::default(),
-                })
-            )])
+                }),
+                pedersen_builtin: None,
+                ecdsa_builtin: None,
+                range_check_builtin: None,
+            }
         );
 
         assert_eq!(cairo_pie.version.cairo_pie, CAIRO_PIE_VERSION);
+    }
+
+    #[test]
+    fn test_deserialize_additional_data() {
+        let data = include_bytes!(
+            "../../../../cairo_programs/manually_compiled/pie_additional_data_test.json"
+        );
+        let additional_data: AdditionalData = serde_json::from_slice(data).unwrap();
+        let output_data = additional_data.output_builtin.unwrap();
+        assert_eq!(
+            output_data.pages,
+            HashMap::from([(
+                1,
+                PublicMemoryPage {
+                    start: 18,
+                    size: 46
+                }
+            )])
+        );
+        assert_eq!(
+            output_data.attributes,
+            HashMap::from([("gps_fact_topology".to_string(), vec![2, 1, 0, 2])])
+        );
+        let pedersen_data = additional_data.pedersen_builtin.unwrap();
+        assert_eq!(
+            pedersen_data,
+            vec![
+                Relocatable::from((3, 2)),
+                Relocatable::from((3, 5)),
+                Relocatable::from((3, 8)),
+                Relocatable::from((3, 11)),
+                Relocatable::from((3, 14)),
+                Relocatable::from((3, 17)),
+            ]
+        );
+        // TODO: add a test case with signature data
+        assert_matches!(additional_data.ecdsa_builtin, None);
     }
 }
