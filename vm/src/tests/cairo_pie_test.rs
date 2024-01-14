@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-use crate::vm::runners::cairo_pie::AdditionalData;
+use crate::vm::runners::cairo_pie::{AdditionalData, SignatureBuiltinAdditionalData};
 #[cfg(all(not(feature = "std"), feature = "alloc"))]
 use alloc::{
     string::{String, ToString},
@@ -162,7 +162,7 @@ fn common_signature() {
     assert_eq!(cairo_pie.execution_resources, expected_execution_resources);
     // additional_data
     let expected_additional_data = AdditionalData {
-        ecdsa_builtin: Some(HashMap::from([(
+        ecdsa_builtin: Some(SignatureBuiltinAdditionalData(HashMap::from([(
             Relocatable::from((2, 0)),
             (
                 felt_str!(
@@ -172,7 +172,7 @@ fn common_signature() {
                     "598673427589502599949712887611119751108407514580626464031881322743364689811"
                 ),
             ),
-        )])),
+        )]))),
         ..Default::default()
     };
 

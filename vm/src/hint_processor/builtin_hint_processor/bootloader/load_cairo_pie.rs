@@ -232,7 +232,7 @@ fn relocate_builtin_additional_data(
         .get_signature_builtin()
         .map_err(|_| SignatureRelocationError::EcdsaBuiltinNotFound)?;
 
-    extend_additional_data(ecdsa_builtin, ecdsa_additional_data, relocation_table)?;
+    extend_additional_data(ecdsa_builtin, &ecdsa_additional_data.0, relocation_table)?;
 
     Ok(())
 }
