@@ -69,6 +69,9 @@ pub struct OutputBuiltinAdditionalData {
     pub attributes: Attributes,
 }
 
+#[derive(Serialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct SignatureBuiltinAdditionalData(pub HashMap<Relocatable, (Felt252, Felt252)>);
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum BuiltinAdditionalData {
@@ -78,7 +81,7 @@ pub enum BuiltinAdditionalData {
     Output(OutputBuiltinAdditionalData),
     // Signatures are composed of (r, s) tuples
     #[serde(serialize_with = "serde_impl::serialize_signature_additional_data")]
-    Signature(HashMap<Relocatable, (Felt252, Felt252)>),
+    Signature(SignatureBuiltinAdditionalData),
     None,
 }
 
@@ -88,9 +91,8 @@ pub struct AdditionalData {
     pub output_builtin: Option<OutputBuiltinAdditionalData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pedersen_builtin: Option<Vec<Relocatable>>,
-    #[serde(flatten)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ecdsa_builtin: Option<HashMap<Relocatable, (Felt252, Felt252)>>,
+    pub ecdsa_builtin: Option<SignatureBuiltinAdditionalData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub range_check_builtin: Option<()>,
 }
@@ -363,8 +365,16 @@ mod serde_impl {
         Felt252,
     };
     use num_bigint::BigUint;
-    use serde::{ser::SerializeSeq, Serialize, Serializer};
+    use serde::{
+        de::{MapAccess, SeqAccess, Visitor},
+        ser::SerializeSeq,
+        Deserialize, Deserializer, Serialize, Serializer,
+    };
     use serde_json::Number;
+    use std::fmt;
+    use std::fmt::Formatter;
+
+    use crate::vm::runners::cairo_pie::SignatureBuiltinAdditionalData;
 
     pub const ADDR_BYTE_LEN: usize = 8;
     pub const FIELD_BYTE_LEN: usize = 32;
@@ -552,12 +562,13 @@ mod serde_impl {
     }
 
     pub fn serialize_signature_additional_data<S>(
-        values: &HashMap<Relocatable, (Felt252, Felt252)>,
+        data: &SignatureBuiltinAdditionalData,
         serializer: S,
     ) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
+        let values = &data.0;
         let mut seq_serializer = serializer.serialize_seq(Some(values.len()))?;
 
         for (key, (x, y)) in values {
@@ -586,6 +597,61 @@ mod serde_impl {
         }
 
         seq_serializer.end()
+    }
+
+    struct SignatureBuiltinAdditionalDataVisitor;
+
+    impl<'de> Visitor<'de> for SignatureBuiltinAdditionalDataVisitor {
+        type Value = SignatureBuiltinAdditionalData;
+
+        fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+            write!(
+                formatter,
+                "a Vec<(Relocatable, (Felt252, Felt252))> or a HashMap<Relocatable, (Felt252, Felt252)>"
+            )
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut map = HashMap::with_capacity(seq.size_hint().unwrap_or(0));
+
+            // While there are entries remaining in the input, add them
+            // into our map.
+            while let Some((key, value)) = seq.next_element()? {
+                map.insert(key, value);
+            }
+
+            Ok(SignatureBuiltinAdditionalData(map))
+        }
+
+        fn visit_map<A>(self, mut access: A) -> Result<Self::Value, A::Error>
+        where
+            A: MapAccess<'de>,
+        {
+            let mut map = HashMap::with_capacity(access.size_hint().unwrap_or(0));
+
+            // While there are entries remaining in the input, add them
+            // into our map.
+            while let Some((key, value)) = access.next_entry()? {
+                map.insert(key, value);
+            }
+
+            Ok(SignatureBuiltinAdditionalData(map))
+        }
+    }
+
+    // This is the trait that informs Serde how to deserialize MyMap.
+    impl<'de> Deserialize<'de> for SignatureBuiltinAdditionalData {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            // Instantiate our Visitor and ask the Deserializer to drive
+            // it over the input data, resulting in an instance of MyMap.
+            deserializer.deserialize_any(SignatureBuiltinAdditionalDataVisitor {})
+        }
     }
 }
 
@@ -788,7 +854,7 @@ mod test {
                     attributes: Default::default(),
                 }),
                 pedersen_builtin: None,
-                ecdsa_builtin: Some(HashMap::default()),
+                ecdsa_builtin: None,
                 range_check_builtin: None,
             }
         );
@@ -851,6 +917,10 @@ mod test {
             ]
         );
         // TODO: add a test case with signature data
-        assert_matches!(additional_data.ecdsa_builtin, None);
+        let expected_signature_additional_data = Some(SignatureBuiltinAdditionalData::default());
+        assert_eq!(
+            additional_data.ecdsa_builtin,
+            expected_signature_additional_data
+        );
     }
 }
