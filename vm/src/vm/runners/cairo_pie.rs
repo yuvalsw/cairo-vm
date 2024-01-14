@@ -183,23 +183,23 @@ fn read_memory_file<R: Read>(
     addr_size: usize,
     felt_size: usize,
 ) -> Result<CairoPieMemory, DeserializeMemoryError> {
-    let memory_cell_size = addr_size + felt_size;
+    let pair_size = addr_size + felt_size;
     let mut memory = CairoPieMemory::new();
     let mut pos: usize = 0;
 
     loop {
-        let mut element = vec![0; memory_cell_size];
-        match reader.read(&mut element) {
-            Ok(n) => {
-                if n == 0 {
-                    break;
-                }
-                if n != memory_cell_size {
-                    return Err(DeserializeMemoryError::UnexpectedEof);
-                }
-            }
-            Err(e) => return Err(e.into()),
+        let mut element = Vec::with_capacity(pair_size);
+        let n = reader
+            .by_ref()
+            .take(pair_size as u64)
+            .read_to_end(&mut element)?;
+        if n == 0 {
+            break;
         }
+        if n != pair_size {
+            return Err(DeserializeMemoryError::UnexpectedEof);
+        }
+
         let (address_bytes, value_bytes) = element.split_at(addr_size);
         let address = maybe_relocatable_from_le_bytes(address_bytes);
         let value = maybe_relocatable_from_le_bytes(value_bytes);
@@ -215,7 +215,7 @@ fn read_memory_file<R: Read>(
                 return Err(DeserializeMemoryError::AddressIsNotRelocatable(pos));
             }
         }
-        pos += memory_cell_size;
+        pos += pair_size;
     }
 
     Ok(memory)
