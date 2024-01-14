@@ -427,8 +427,8 @@ pub fn call_task(
             let program_address: Relocatable = exec_scopes.get("program_address")?;
 
             // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
-            let program = get_bootloader_program(exec_scopes)?;
-            let identifiers = &program.shared_program_data.identifiers;
+            let bootloader_program = get_bootloader_program(exec_scopes)?;
+            let identifiers = &bootloader_program.shared_program_data.identifiers;
             let ret_pc_label = get_identifier(identifiers, "starkware.cairo.bootloaders.simple_bootloader.execute_task.execute_task.ret_pc_label")?;
             let call_task = get_identifier(
                 identifiers,
@@ -664,6 +664,42 @@ mod tests {
         );
     }
 
+    /// Creates a fake Program struct to act as a placeholder for the `BOOTLOADER_PROGRAM` variable.
+    /// These other options have been considered:
+    /// * a `HasIdentifiers` trait cannot be used as exec_scopes requires to cast to `Box<dyn Any>`,
+    ///   making casting back to the trait impossible.
+    /// * using an enum requires defining test-only variants.
+    fn mock_program_with_identifiers(symbols: HashMap<String, usize>) -> Program {
+        let identifiers = symbols
+            .into_iter()
+            .map(|(name, pc)| {
+                (
+                    name,
+                    Identifier {
+                        pc: Some(pc),
+                        type_: None,
+                        value: None,
+                        full_name: None,
+                        members: None,
+                        cairo_type: None,
+                    },
+                )
+            })
+            .collect();
+
+        let shared_program_data = SharedProgramData {
+            identifiers,
+            ..Default::default()
+        };
+        let program = Program {
+            shared_program_data: Arc::new(shared_program_data),
+            constants: Default::default(),
+            builtins: vec![],
+        };
+
+        program
+    }
+
     #[rstest]
     fn test_call_cairo_pie_task(fibonacci_pie: CairoPie) {
         let mut vm = vm!();
@@ -694,7 +730,15 @@ mod tests {
 
         let task = Task::Pie(fibonacci_pie);
         exec_scopes.insert_value(vars::TASK, task);
+        let bootloader_identifiers = HashMap::from(
+            [
+                ("starkware.cairo.bootloaders.simple_bootloader.execute_task.execute_task.ret_pc_label".to_string(), 10usize),
+                ("starkware.cairo.bootloaders.simple_bootloader.execute_task.execute_task.call_task".to_string(), 8usize)
+            ]
+        );
+        let bootloader_program = mock_program_with_identifiers(bootloader_identifiers);
         exec_scopes.insert_value(vars::PROGRAM_DATA_BASE, program_header_ptr.clone());
+        exec_scopes.insert_value(vars::BOOTLOADER_PROGRAM, bootloader_program);
 
         // Load the program in memory
         load_program_hint(&mut vm, &mut exec_scopes, &ids_data, &ap_tracking)
