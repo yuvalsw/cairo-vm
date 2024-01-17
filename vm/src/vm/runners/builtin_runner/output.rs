@@ -170,6 +170,21 @@ impl OutputBuiltinRunner {
 
         Ok(())
     }
+
+    pub fn get_public_memory(&self) -> Result<Vec<(usize, usize)>, RunnerError> {
+        let size = self
+            .stop_ptr
+            .ok_or(RunnerError::NoStopPointer(Box::new(OUTPUT_BUILTIN_NAME)))?;
+
+        let mut public_memory: Vec<(usize, usize)> = (0..size).map(|i| (i, 0)).collect();
+        for (page_id, page) in self.pages.iter() {
+            for index in 0..page.size {
+                public_memory[page.start + index].1 = page_id.clone();
+            }
+        }
+
+        Ok(public_memory)
+    }
 }
 
 impl Default for OutputBuiltinRunner {
@@ -550,5 +565,23 @@ mod tests {
         assert!(
             matches!(result, Err(RunnerError::PageNotOnSegment(relocatable, base)) if relocatable == page_start && base == builtin.base())
         )
+    }
+
+    #[test]
+    fn get_public_memory() {
+        let mut builtin = OutputBuiltinRunner::new(true);
+        let page_start = Relocatable {
+            segment_index: builtin.base() as isize,
+            offset: 2,
+        };
+        builtin
+            .add_page(1, page_start.clone(), 2)
+            .expect("Failed to add page");
+
+        // Mock the effects of `final_stack()`
+        builtin.stop_ptr = Some(4);
+
+        let public_memory = builtin.get_public_memory().unwrap();
+        assert_eq!(public_memory, vec![(0, 0), (1, 0), (2, 1), (3, 1)]);
     }
 }
