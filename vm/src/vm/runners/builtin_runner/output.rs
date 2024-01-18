@@ -13,7 +13,7 @@ use super::OUTPUT_BUILTIN_NAME;
 
 #[derive(Debug, Clone)]
 pub struct OutputBuiltinRunner {
-    pub(crate) base: usize,
+    base: usize,
     pub(crate) pages: Pages,
     pub(crate) attributes: Attributes,
     pub(crate) stop_ptr: Option<usize>,
