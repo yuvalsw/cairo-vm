@@ -2,7 +2,9 @@ use crate::stdlib::{collections::HashMap, prelude::*};
 use crate::types::relocatable::{MaybeRelocatable, Relocatable};
 use crate::vm::errors::memory_errors::MemoryError;
 use crate::vm::errors::runner_errors::RunnerError;
-use crate::vm::runners::cairo_pie::{BuiltinAdditionalData, OutputBuiltinAdditionalData};
+use crate::vm::runners::cairo_pie::{
+    Attributes, BuiltinAdditionalData, OutputBuiltinAdditionalData, Pages, PublicMemoryPage,
+};
 use crate::vm::vm_core::VirtualMachine;
 use crate::vm::vm_memory::memory::Memory;
 use crate::vm::vm_memory::memory_segments::MemorySegmentManager;
@@ -11,7 +13,9 @@ use super::OUTPUT_BUILTIN_NAME;
 
 #[derive(Debug, Clone)]
 pub struct OutputBuiltinRunner {
-    base: usize,
+    pub(crate) base: usize,
+    pub(crate) pages: Pages,
+    pub(crate) attributes: Attributes,
     pub(crate) stop_ptr: Option<usize>,
     pub(crate) included: bool,
 }
@@ -20,9 +24,29 @@ impl OutputBuiltinRunner {
     pub fn new(included: bool) -> OutputBuiltinRunner {
         OutputBuiltinRunner {
             base: 0,
+            pages: HashMap::default(),
+            attributes: HashMap::default(),
             stop_ptr: None,
             included,
         }
+    }
+
+    pub fn from_segment(segment: &Relocatable, included: bool) -> Self {
+        Self {
+            base: segment.segment_index as usize,
+            pages: HashMap::default(),
+            attributes: HashMap::default(),
+            stop_ptr: None,
+            included,
+        }
+    }
+
+    pub fn new_state(&mut self, base: usize, included: bool) {
+        self.base = base;
+        self.pages = HashMap::default();
+        self.attributes = HashMap::default();
+        self.stop_ptr = None;
+        self.included = included;
     }
 
     pub fn initialize_segments(&mut self, segments: &mut MemorySegmentManager) {
@@ -110,13 +134,56 @@ impl OutputBuiltinRunner {
 
     pub fn get_additional_data(&self) -> BuiltinAdditionalData {
         BuiltinAdditionalData::Output(OutputBuiltinAdditionalData {
-            pages: HashMap::default(),
-            attributes: HashMap::default(),
+            base: self.base,
+            pages: self.pages.clone(),
+            attributes: self.attributes.clone(),
         })
     }
 
     pub(crate) fn set_stop_ptr_offset(&mut self, offset: usize) {
         self.stop_ptr = Some(offset)
+    }
+
+    pub fn set_state(&mut self, data: OutputBuiltinAdditionalData) {
+        self.base = data.base;
+        self.pages = data.pages;
+        self.attributes = data.attributes;
+    }
+
+    pub fn add_page(
+        &mut self,
+        page_id: usize,
+        page_start: Relocatable,
+        page_size: usize,
+    ) -> Result<(), RunnerError> {
+        if page_start.segment_index as usize != self.base {
+            return Err(RunnerError::PageNotOnSegment(page_start, self.base));
+        }
+
+        self.pages.insert(
+            page_id,
+            PublicMemoryPage {
+                start: page_start.offset,
+                size: page_size,
+            },
+        );
+
+        Ok(())
+    }
+
+    pub fn get_public_memory(&self) -> Result<Vec<(usize, usize)>, RunnerError> {
+        let size = self
+            .stop_ptr
+            .ok_or(RunnerError::NoStopPointer(Box::new(OUTPUT_BUILTIN_NAME)))?;
+
+        let mut public_memory: Vec<(usize, usize)> = (0..size).map(|i| (i, 0)).collect();
+        for (page_id, page) in self.pages.iter() {
+            for index in 0..page.size {
+                public_memory[page.start + index].1 = page_id.clone();
+            }
+        }
+
+        Ok(public_memory)
     }
 }
 
@@ -449,6 +516,7 @@ mod tests {
         assert_eq!(
             builtin.get_additional_data(),
             BuiltinAdditionalData::Output(OutputBuiltinAdditionalData {
+                base: builtin.base,
                 pages: HashMap::default(),
                 attributes: HashMap::default()
             })
@@ -462,5 +530,40 @@ mod tests {
 
         let memory = memory![((0, 0), 0), ((0, 1), 1), ((0, 2), 2), ((0, 3), 3)];
         assert!(builtin.air_private_input(&memory).is_empty());
+    }
+    #[test]
+
+    fn add_page() {
+        let mut builtin = OutputBuiltinRunner::new(true);
+        assert_eq!(
+            builtin.add_page(
+                1,
+                Relocatable {
+                    segment_index: builtin.base() as isize,
+                    offset: 0
+                },
+                3
+            ),
+            Ok(())
+        );
+
+        assert_eq!(
+            builtin.pages,
+            HashMap::from([(1, PublicMemoryPage { start: 0, size: 3 }),])
+        )
+    }
+
+    #[test]
+    fn add_page_wrong_segment() {
+        let mut builtin = OutputBuiltinRunner::new(true);
+        let page_start = Relocatable {
+            segment_index: 18,
+            offset: 0,
+        };
+
+        let result = builtin.add_page(1, page_start.clone(), 3);
+        assert!(
+            matches!(result, Err(RunnerError::PageNotOnSegment(relocatable, base)) if relocatable == page_start && base == builtin.base())
+        )
     }
 }

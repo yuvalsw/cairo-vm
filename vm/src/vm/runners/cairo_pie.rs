@@ -51,6 +51,8 @@ pub type Pages = HashMap<usize, PublicMemoryPage>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OutputBuiltinAdditionalData {
+    #[serde(skip)]
+    pub base: usize,
     pub pages: Pages,
     pub attributes: Attributes,
 }
