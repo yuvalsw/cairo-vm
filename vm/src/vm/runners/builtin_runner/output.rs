@@ -31,16 +31,6 @@ impl OutputBuiltinRunner {
         }
     }
 
-    pub fn from_segment(segment: &Relocatable, included: bool) -> Self {
-        Self {
-            base: segment.segment_index as usize,
-            pages: HashMap::default(),
-            attributes: HashMap::default(),
-            stop_ptr: None,
-            included,
-        }
-    }
-
     pub fn new_state(&mut self, base: usize, included: bool) {
         self.base = base;
         self.pages = HashMap::default();
@@ -530,19 +520,6 @@ mod tests {
 
         let memory = memory![((0, 0), 0), ((0, 1), 1), ((0, 2), 2), ((0, 3), 3)];
         assert!(builtin.air_private_input(&memory).is_empty());
-    }
-
-    #[test]
-    fn from_segment() {
-        let segment_base = Relocatable::from((10, 0));
-        let included = true;
-
-        let builtin = OutputBuiltinRunner::from_segment(&segment_base, included);
-        assert_eq!(builtin.base, segment_base.segment_index as usize);
-        assert_eq!(builtin.stop_ptr, None);
-        assert_eq!(builtin.pages, HashMap::default());
-        assert_eq!(builtin.attributes, HashMap::default());
-        assert_eq!(builtin.included, included);
     }
 
     #[test]
