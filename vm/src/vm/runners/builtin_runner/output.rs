@@ -179,7 +179,7 @@ impl OutputBuiltinRunner {
         let mut public_memory: Vec<(usize, usize)> = (0..size).map(|i| (i, 0)).collect();
         for (page_id, page) in self.pages.iter() {
             for index in 0..page.size {
-                public_memory[page.start + index].1 = page_id.clone();
+                public_memory[page.start + index].1 = *page_id;
             }
         }
 
@@ -531,8 +531,38 @@ mod tests {
         let memory = memory![((0, 0), 0), ((0, 1), 1), ((0, 2), 2), ((0, 3), 3)];
         assert!(builtin.air_private_input(&memory).is_empty());
     }
-    #[test]
 
+    #[test]
+    fn from_segment() {
+        let segment_base = Relocatable::from((10, 0));
+        let included = true;
+
+        let builtin = OutputBuiltinRunner::from_segment(&segment_base, included);
+        assert_eq!(builtin.base, segment_base.segment_index as usize);
+        assert_eq!(builtin.stop_ptr, None);
+        assert_eq!(builtin.pages, HashMap::default());
+        assert_eq!(builtin.attributes, HashMap::default());
+        assert_eq!(builtin.included, included);
+    }
+
+    #[test]
+    fn set_state() {
+        let mut builtin = OutputBuiltinRunner::new(true);
+        assert_eq!(builtin.base, 0);
+
+        let new_state = OutputBuiltinAdditionalData {
+            base: 10,
+            pages: HashMap::from([(1, PublicMemoryPage { start: 0, size: 3 })]),
+            attributes: HashMap::from([("gps_fact_topology".to_string(), vec![0, 2, 0])]),
+        };
+        builtin.set_state(new_state.clone());
+
+        assert_eq!(builtin.base, new_state.base);
+        assert_eq!(builtin.pages, new_state.pages);
+        assert_eq!(builtin.attributes, new_state.attributes);
+    }
+
+    #[test]
     fn add_page() {
         let mut builtin = OutputBuiltinRunner::new(true);
         assert_eq!(
@@ -561,9 +591,44 @@ mod tests {
             offset: 0,
         };
 
-        let result = builtin.add_page(1, page_start.clone(), 3);
+        let result = builtin.add_page(1, page_start, 3);
         assert!(
             matches!(result, Err(RunnerError::PageNotOnSegment(relocatable, base)) if relocatable == page_start && base == builtin.base())
         )
+    }
+
+    #[test]
+    fn get_public_memory() {
+        let mut builtin = OutputBuiltinRunner::new(true);
+
+        builtin
+            .add_page(
+                1,
+                Relocatable {
+                    segment_index: builtin.base() as isize,
+                    offset: 2,
+                },
+                2,
+            )
+            .unwrap();
+
+        builtin
+            .add_page(
+                2,
+                Relocatable {
+                    segment_index: builtin.base() as isize,
+                    offset: 4,
+                },
+                3,
+            )
+            .unwrap();
+
+        builtin.stop_ptr = Some(7);
+
+        let public_memory = builtin.get_public_memory().unwrap();
+        assert_eq!(
+            public_memory,
+            vec![(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2), (6, 2)]
+        );
     }
 }
