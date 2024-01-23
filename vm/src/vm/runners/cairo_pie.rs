@@ -179,7 +179,7 @@ impl CairoPie {
 
     pub fn from_zip_archive<R: Read + Seek>(
         mut zip: zip::ZipArchive<R>,
-    ) -> Result<CairoPie, CairoPieError> {
+    ) -> Result<Self, CairoPieError> {
         let metadata: CairoPieMetadata = Self::parse_zip_file(zip.by_name("metadata.json")?)?;
         let execution_resources: ExecutionResources =
             Self::parse_zip_file(zip.by_name("execution_resources.json")?)?;
@@ -197,7 +197,7 @@ impl CairoPie {
         };
         let memory = Self::read_memory_file(zip.by_name("memory.bin")?, addr_size, felt_bytes)?;
 
-        Ok(CairoPie {
+        Ok(Self {
             metadata,
             memory,
             execution_resources,
@@ -206,13 +206,22 @@ impl CairoPie {
         })
     }
 
+    /// Builds a CairoPie object from an array of bytes.
+    #[cfg(feature = "std")]
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, CairoPieError> {
+        let reader = std::io::Cursor::new(bytes);
+        let zip_archive = zip::ZipArchive::new(reader)?;
+
+        Self::from_zip_archive(zip_archive)
+    }
+
     /// Builds a CairoPie object from a ZIP archive.
     #[cfg(feature = "std")]
-    pub fn from_file(path: &Path) -> Result<CairoPie, CairoPieError> {
+    pub fn from_file(path: &Path) -> Result<Self, CairoPieError> {
         let file = std::fs::File::open(path)?;
         let zip = zip::ZipArchive::new(file)?;
 
-        CairoPie::from_zip_archive(zip)
+        Self::from_zip_archive(zip)
     }
 }
 
