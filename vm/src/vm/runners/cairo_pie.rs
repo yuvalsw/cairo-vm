@@ -42,7 +42,7 @@ impl From<(isize, usize)> for SegmentInfo {
 // A simplified version of Memory, without any additional data besides its elements
 // Contains all addr-value pairs, ordered by index and offset
 // Allows practical serialization + conversion between CairoPieMemory & Memory
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct CairoPieMemory(
     #[serde(serialize_with = "serde_impl::serialize_memory")]
     pub  Vec<((usize, usize), MaybeRelocatable)>,
@@ -396,6 +396,10 @@ mod serde_impl {
 
         pub fn len(&self) -> usize {
             self.0.len()
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.0.is_empty()
         }
 
         pub fn to_bytes(&self) -> Vec<u8> {
