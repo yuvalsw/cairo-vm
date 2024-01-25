@@ -2,6 +2,8 @@
 
 #### Upcoming Changes
 
+* feat: deserialize CairoPie from ZIP archives [#1533] (https://github.com/lambdaclass/cairo-vm/pull/1533)
+
 * perf: optimize instruction cache allocations by using `VirtualMachine::load_data` [#1441](https://github.com/lambdaclass/cairo-vm/pull/1441)
 
 * feat: Add `print_output` flag to `cairo-1` crate [#1575] (https://github.com/lambdaclass/cairo-vm/pull/1575)
