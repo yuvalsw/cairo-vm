@@ -13,14 +13,16 @@ use {
 };
 
 use super::cairo_runner::ExecutionResources;
+use crate::serde::deserialize_program::deserialize_biguint_from_number;
 use crate::stdlib::prelude::{String, Vec};
+use crate::utils::CAIRO_PRIME;
 use crate::{
     serde::deserialize_program::BuiltinName,
     stdlib::{collections::HashMap, prelude::*},
     types::relocatable::{MaybeRelocatable, Relocatable},
     Felt252,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize};
 
 pub const CAIRO_PIE_VERSION: &str = "1.1";
 
@@ -225,6 +227,26 @@ impl CairoPie {
     }
 }
 
+#[cfg(feature = "std")]
+pub(crate) fn deserialize_cairo_prime<'de, D>(deserializer: D) -> Result<BigUint, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    match deserialize_biguint_from_number(deserializer) {
+        Ok(n) => {
+            if n == *CAIRO_PRIME {
+                Ok(n)
+            } else {
+                Err(de::Error::custom(format!(
+                    "Cairo PIE prime ({}) does not match Cairo prime ({})",
+                    n, *CAIRO_PRIME
+                )))
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(Deserialize))]
 pub struct CairoPieMetadata {
@@ -249,12 +271,7 @@ pub struct StrippedProgram {
     pub builtins: Vec<BuiltinName>,
     pub main: usize,
     #[serde(serialize_with = "serde_impl::serialize_prime")]
-    #[cfg_attr(
-        feature = "std",
-        serde(
-            deserialize_with = "crate::serde::deserialize_program::deserialize_biguint_from_number"
-        )
-    )]
+    #[cfg_attr(feature = "std", serde(deserialize_with = "deserialize_cairo_prime"))]
     pub prime: BigUint,
 }
 
