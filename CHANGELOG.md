@@ -24,6 +24,8 @@
   * Add instructions to the proof_mode header to copy return values to the output segment before initiating the infinite loop
   * Output builtin is now always included when running cairo 1 programs in proof_mode
 
+* feat: output builtin features for bootloader support [#1580](https://github.com/lambdaclass/cairo-vm/pull/1580)
+
 * feat(BREAKING): Remove unecessary conversion functions between `Felt` & `BigUint`/`BigInt` [#1562](https://github.com/lambdaclass/cairo-vm/pull/1562)
   * Remove the following functions:
     * felt_from_biguint
