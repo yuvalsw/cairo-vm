@@ -527,7 +527,9 @@ mod test {
     use super::*;
 
     #[cfg(feature = "std")]
-    use {crate::utils::CAIRO_PRIME, rstest::rstest, std::fs::File};
+    use {
+        crate::utils::CAIRO_PRIME, assert_matches::assert_matches, rstest::rstest, std::fs::File,
+    };
 
     #[test]
     fn serialize_cairo_pie_memory() {
@@ -639,11 +641,33 @@ mod test {
 
     #[cfg(feature = "std")]
     #[test]
-    fn test_cairo_pie_from_file() {
-        let path =
-            Path::new("../cairo_programs/manually_compiled/fibonacci_cairo_pie/fibonacci_pie.zip");
+    fn test_read_memory_file_invalid_size() {
+        // A memory file with 42 bytes instead of the expected 40
+        let memory_hex =
+            "0000000000000080ff7fff7f01800704000000000000000000000000000000000000000000000000DEAD";
+        let bytes = hex::decode(memory_hex).unwrap();
 
-        let cairo_pie = CairoPie::from_file(path).expect("Could not read CairoPie zip file");
+        let result = CairoPie::read_memory_file(bytes.as_slice(), 8, 32);
+        assert_matches!(result, Err(DeserializeMemoryError::UnexpectedEof));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_read_memory_file_invalid_address() {
+        // The "relocatable" bit is not set in the address field (first 8 bytes)
+        let memory_hex =
+            "0000000000000000ff7fff7f01800704000000000000000000000000000000000000000000000000";
+        let bytes = hex::decode(memory_hex).unwrap();
+
+        let result = CairoPie::read_memory_file(bytes.as_slice(), 8, 32);
+        assert_matches!(
+            result,
+            Err(DeserializeMemoryError::AddressIsNotRelocatable(_))
+        );
+    }
+
+    #[cfg(feature = "std")]
+    fn validate_pie_content(cairo_pie: CairoPie) {
         assert_eq!(cairo_pie.metadata.program.prime, CAIRO_PRIME.clone());
         assert_eq!(
             cairo_pie.metadata.program.builtins,
@@ -701,5 +725,27 @@ mod test {
         );
 
         assert_eq!(cairo_pie.version.cairo_pie, CAIRO_PIE_VERSION);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_cairo_pie_from_file() {
+        let path =
+            Path::new("../cairo_programs/manually_compiled/fibonacci_cairo_pie/fibonacci_pie.zip");
+
+        let cairo_pie = CairoPie::from_file(path).expect("Could not read CairoPie zip file");
+        validate_pie_content(cairo_pie);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_cairo_pie_from_bytes() {
+        let path =
+            Path::new("../cairo_programs/manually_compiled/fibonacci_cairo_pie/fibonacci_pie.zip");
+        let cairo_pie_bytes = std::fs::read(path).unwrap();
+
+        let cairo_pie =
+            CairoPie::from_bytes(&cairo_pie_bytes).expect("Could not read CairoPie zip file");
+        validate_pie_content(cairo_pie);
     }
 }
