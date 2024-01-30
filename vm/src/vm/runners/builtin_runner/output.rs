@@ -11,6 +11,13 @@ use crate::vm::vm_memory::memory_segments::MemorySegmentManager;
 
 use super::OUTPUT_BUILTIN_NAME;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutputBuiltinState {
+    pub base: usize,
+    pub pages: Pages,
+    pub attributes: Attributes,
+}
+
 #[derive(Debug, Clone)]
 pub struct OutputBuiltinRunner {
     base: usize,
@@ -124,7 +131,6 @@ impl OutputBuiltinRunner {
 
     pub fn get_additional_data(&self) -> BuiltinAdditionalData {
         BuiltinAdditionalData::Output(OutputBuiltinAdditionalData {
-            base: self.base,
             pages: self.pages.clone(),
             attributes: self.attributes.clone(),
         })
@@ -134,10 +140,18 @@ impl OutputBuiltinRunner {
         self.stop_ptr = Some(offset)
     }
 
-    pub fn set_state(&mut self, data: OutputBuiltinAdditionalData) {
-        self.base = data.base;
-        self.pages = data.pages;
-        self.attributes = data.attributes;
+    pub fn set_state(&mut self, new_state: OutputBuiltinState) {
+        self.base = new_state.base;
+        self.pages = new_state.pages;
+        self.attributes = new_state.attributes;
+    }
+
+    pub fn get_state(&mut self) -> OutputBuiltinState {
+        OutputBuiltinState {
+            base: self.base,
+            pages: self.pages.clone(),
+            attributes: self.attributes.clone(),
+        }
     }
 
     pub fn add_page(
@@ -506,7 +520,6 @@ mod tests {
         assert_eq!(
             builtin.get_additional_data(),
             BuiltinAdditionalData::Output(OutputBuiltinAdditionalData {
-                base: builtin.base,
                 pages: HashMap::default(),
                 attributes: HashMap::default()
             })
@@ -527,7 +540,7 @@ mod tests {
         let mut builtin = OutputBuiltinRunner::new(true);
         assert_eq!(builtin.base, 0);
 
-        let new_state = OutputBuiltinAdditionalData {
+        let new_state = OutputBuiltinState {
             base: 10,
             pages: HashMap::from([(1, PublicMemoryPage { start: 0, size: 3 })]),
             attributes: HashMap::from([("gps_fact_topology".to_string(), vec![0, 2, 0])]),
@@ -537,6 +550,9 @@ mod tests {
         assert_eq!(builtin.base, new_state.base);
         assert_eq!(builtin.pages, new_state.pages);
         assert_eq!(builtin.attributes, new_state.attributes);
+
+        let state = builtin.get_state();
+        assert_eq!(state, new_state);
     }
 
     #[test]
