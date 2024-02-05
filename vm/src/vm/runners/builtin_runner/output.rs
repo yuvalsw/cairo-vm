@@ -556,6 +556,27 @@ mod tests {
     }
 
     #[test]
+    fn new_state() {
+        let mut builtin = OutputBuiltinRunner {
+            base: 10,
+            pages: HashMap::from([(1, PublicMemoryPage { start: 0, size: 3 })]),
+            attributes: HashMap::from([("gps_fact_topology".to_string(), vec![0, 2, 0])]),
+            stop_ptr: Some(10),
+            included: true,
+        };
+
+        let new_base = 11;
+        let new_included = false;
+        builtin.new_state(new_base, new_included);
+
+        assert_eq!(builtin.base, new_base);
+        assert!(builtin.pages.is_empty());
+        assert!(builtin.attributes.is_empty());
+        assert_eq!(builtin.stop_ptr, None);
+        assert_eq!(builtin.included, new_included);
+    }
+
+    #[test]
     fn add_page() {
         let mut builtin = OutputBuiltinRunner::new(true);
         assert_eq!(
