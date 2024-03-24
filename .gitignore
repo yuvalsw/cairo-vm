@@ -25,3 +25,6 @@ ensure-no_std/Cargo.lock
 cairo_programs/proof_programs/*.cairo
 
 !vm/src/tests/cairo_pie_test_output.json
+
+# JetBrains IDE files
+.idea

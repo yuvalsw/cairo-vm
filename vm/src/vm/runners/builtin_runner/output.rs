@@ -20,7 +20,7 @@ pub struct OutputBuiltinState {
 
 #[derive(Debug, Clone)]
 pub struct OutputBuiltinRunner {
-    base: usize,
+    pub(crate) base: usize,
     pub(crate) pages: Pages,
     pub(crate) attributes: Attributes,
     pub(crate) stop_ptr: Option<usize>,
@@ -31,6 +31,16 @@ impl OutputBuiltinRunner {
     pub fn new(included: bool) -> OutputBuiltinRunner {
         OutputBuiltinRunner {
             base: 0,
+            pages: HashMap::default(),
+            attributes: HashMap::default(),
+            stop_ptr: None,
+            included,
+        }
+    }
+
+    pub fn from_segment(segment: &Relocatable, included: bool) -> Self {
+        Self {
+            base: segment.segment_index as usize,
             pages: HashMap::default(),
             attributes: HashMap::default(),
             stop_ptr: None,
@@ -131,6 +141,7 @@ impl OutputBuiltinRunner {
 
     pub fn get_additional_data(&self) -> BuiltinAdditionalData {
         BuiltinAdditionalData::Output(OutputBuiltinAdditionalData {
+            base: self.base,
             pages: self.pages.clone(),
             attributes: self.attributes.clone(),
         })
@@ -520,8 +531,9 @@ mod tests {
         assert_eq!(
             builtin.get_additional_data(),
             BuiltinAdditionalData::Output(OutputBuiltinAdditionalData {
+                base: builtin.base,
                 pages: HashMap::default(),
-                attributes: HashMap::default()
+                attributes: HashMap::default(),
             })
         )
     }

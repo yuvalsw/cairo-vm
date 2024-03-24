@@ -1,5 +1,12 @@
 use super::{
     blake2s_utils::finalize_blake2s_v3,
+    bootloader::bootloader_hints::{
+        assert_is_composite_packed_output, assert_program_address, enter_packed_output_scope,
+        guess_pre_image_of_subtasks_output_hash, import_packed_output_schemas,
+        is_plain_packed_output, load_bootloader_config, prepare_simple_bootloader_input,
+        prepare_simple_bootloader_output_segment, restore_bootloader_output, save_output_pointer,
+        save_packed_outputs, set_packed_output_to_subtasks,
+    },
     ec_recover::{
         ec_recover_divmod_n_packed, ec_recover_product_div_m, ec_recover_product_mod,
         ec_recover_sub_a_b,
@@ -19,6 +26,17 @@ use super::{
         inv_mod_p_uint512::inv_mod_p_uint512,
         pack::*,
     },
+};
+use crate::hint_processor::builtin_hint_processor::bootloader::bootloader_hints::compute_and_configure_fact_topologies;
+use crate::hint_processor::builtin_hint_processor::bootloader::execute_task_hints::{
+    allocate_program_data_segment, append_fact_topologies, call_task, load_program_hint,
+    validate_hash, write_return_builtins_hint,
+};
+use crate::hint_processor::builtin_hint_processor::bootloader::inner_select_builtins::select_builtin;
+use crate::hint_processor::builtin_hint_processor::bootloader::select_builtins::select_builtins_enter_scope;
+use crate::hint_processor::builtin_hint_processor::bootloader::simple_bootloader_hints::{
+    divide_num_by_2, prepare_task_range_checks, set_ap_to_zero, set_current_task,
+    set_tasks_variable,
 };
 use crate::Felt252;
 use crate::{
@@ -816,6 +834,103 @@ impl HintProcessorLogic for BuiltinHintProcessor {
             }
             hint_code::EC_RECOVER_PRODUCT_DIV_M => ec_recover_product_div_m(exec_scopes),
             hint_code::SPLIT_XX => split_xx(vm, &hint_data.ids_data, &hint_data.ap_tracking),
+            hint_code::BOOTLOADER_PREPARE_SIMPLE_BOOTLOADER_OUTPUT_SEGMENT => {
+                prepare_simple_bootloader_output_segment(
+                    vm,
+                    exec_scopes,
+                    &hint_data.ids_data,
+                    &hint_data.ap_tracking,
+                )
+            }
+            hint_code::BOOTLOADER_RESTORE_BOOTLOADER_OUTPUT => {
+                restore_bootloader_output(vm, exec_scopes)
+            }
+            hint_code::BOOTLOADER_PREPARE_SIMPLE_BOOTLOADER_INPUT => {
+                prepare_simple_bootloader_input(exec_scopes)
+            }
+            hint_code::BOOTLOADER_LOAD_BOOTLOADER_CONFIG => {
+                load_bootloader_config(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::BOOTLOADER_ENTER_PACKED_OUTPUT_SCOPE => enter_packed_output_scope(
+                vm,
+                exec_scopes,
+                &hint_data.ids_data,
+                &hint_data.ap_tracking,
+            ),
+            hint_code::BOOTLOADER_SAVE_OUTPUT_POINTER => {
+                save_output_pointer(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::BOOTLOADER_SAVE_PACKED_OUTPUTS => save_packed_outputs(exec_scopes),
+            hint_code::BOOTLOADER_GUESS_PRE_IMAGE_OF_SUBTASKS_OUTPUT_HASH => {
+                guess_pre_image_of_subtasks_output_hash(
+                    vm,
+                    exec_scopes,
+                    &hint_data.ids_data,
+                    &hint_data.ap_tracking,
+                )
+            }
+            hint_code::BOOTLOADER_COMPUTE_FACT_TOPOLOGIES => {
+                compute_and_configure_fact_topologies(vm, exec_scopes)
+            }
+            hint_code::BOOTLOADER_SET_PACKED_OUTPUT_TO_SUBTASKS => {
+                set_packed_output_to_subtasks(exec_scopes)
+            }
+            hint_code::BOOTLOADER_IMPORT_PACKED_OUTPUT_SCHEMAS => import_packed_output_schemas(),
+            hint_code::BOOTLOADER_IS_PLAIN_PACKED_OUTPUT => is_plain_packed_output(vm, exec_scopes),
+            hint_code::BOOTLOADER_ASSERT_IS_COMPOSITE_PACKED_OUTPUT => {
+                assert_is_composite_packed_output(exec_scopes)
+            }
+            hint_code::SIMPLE_BOOTLOADER_PREPARE_TASK_RANGE_CHECKS => prepare_task_range_checks(
+                vm,
+                exec_scopes,
+                &hint_data.ids_data,
+                &hint_data.ap_tracking,
+            ),
+            hint_code::SIMPLE_BOOTLOADER_SET_TASKS_VARIABLE => set_tasks_variable(exec_scopes),
+            hint_code::SIMPLE_BOOTLOADER_DIVIDE_NUM_BY_2 => {
+                divide_num_by_2(vm, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::SIMPLE_BOOTLOADER_SET_CURRENT_TASK => {
+                set_current_task(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::SIMPLE_BOOTLOADER_ZERO => set_ap_to_zero(vm),
+            hint_code::EXECUTE_TASK_ALLOCATE_PROGRAM_DATA_SEGMENT => allocate_program_data_segment(
+                vm,
+                exec_scopes,
+                &hint_data.ids_data,
+                &hint_data.ap_tracking,
+            ),
+            hint_code::EXECUTE_TASK_LOAD_PROGRAM => {
+                load_program_hint(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::EXECUTE_TASK_VALIDATE_HASH => {
+                validate_hash(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::EXECUTE_TASK_ASSERT_PROGRAM_ADDRESS => {
+                assert_program_address(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::EXECUTE_TASK_CALL_TASK => {
+                call_task(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::EXECUTE_TASK_WRITE_RETURN_BUILTINS => write_return_builtins_hint(
+                vm,
+                exec_scopes,
+                &hint_data.ids_data,
+                &hint_data.ap_tracking,
+            ),
+            hint_code::EXECUTE_TASK_EXIT_SCOPE => exit_scope(exec_scopes),
+            hint_code::EXECUTE_TASK_APPEND_FACT_TOPOLOGIES => {
+                append_fact_topologies(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::INNER_SELECT_BUILTINS_SELECT_BUILTIN => {
+                select_builtin(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::SELECT_BUILTINS_ENTER_SCOPE => select_builtins_enter_scope(
+                vm,
+                exec_scopes,
+                &hint_data.ids_data,
+                &hint_data.ap_tracking,
+            ),
             #[cfg(feature = "skip_next_instruction_hint")]
             hint_code::SKIP_NEXT_INSTRUCTION => skip_next_instruction(vm),
             #[cfg(feature = "print")]
@@ -851,10 +966,11 @@ impl ResourceTracker for BuiltinHintProcessor {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
+
     use crate::stdlib::any::Any;
     use crate::types::relocatable::Relocatable;
-
     use crate::{
         any_box,
         types::{exec_scope::ExecutionScopes, relocatable::MaybeRelocatable},
@@ -866,8 +982,7 @@ mod tests {
     };
     use assert_matches::assert_matches;
 
-    #[cfg(target_arch = "wasm32")]
-    use wasm_bindgen_test::*;
+    use super::*;
 
     #[test]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
