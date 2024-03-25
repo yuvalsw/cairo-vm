@@ -706,7 +706,7 @@ mod tests {
             attributes: HashMap::from([("gps_fact_topology".to_string(), tree_structure.clone())]),
         };
         let mut output_builtin = OutputBuiltinRunner::new(true);
-        output_builtin.set_state(program_output_data.clone());
+        output_builtin.set_state(program_output_data.into());
         output_builtin.initialize_segments(&mut vm.segments);
         vm.builtin_runners
             .push(BuiltinRunner::Output(output_builtin));

@@ -33,6 +33,7 @@ pub enum ProgramHashError {
     Felt252ToFieldElementConversionFailed,
 }
 
+/// ```text
 /// Computes a hash chain over the data, in the following order:
 ///     h(data[0], h(data[1], h(..., h(data[n-2], data[n-1])))).
 ///
@@ -40,6 +41,7 @@ pub enum ProgramHashError {
 /// def compute_hash_chain(data, hash_func=pedersen_hash):
 ///     assert len(data) >= 1, f"len(data) for hash chain computation must be >= 1; got: {len(data)}."
 ///     return functools.reduce(lambda x, y: hash_func(y, x), data[::-1])
+/// ```
 fn compute_hash_chain<'a, I>(
     data: I,
     hash_func: HashFunction,
@@ -90,6 +92,7 @@ fn maybe_relocatable_to_field_element(
 }
 
 #[allow(dead_code)] // TODO: remove
+/// ```text
 /// Computes the Pedersen hash of a program.
 ///
 /// Reimplements this Python function:
@@ -100,6 +103,7 @@ fn maybe_relocatable_to_field_element(
 ///     data_chain = program_header + program.data
 ///  
 ///     return compute_hash_chain([len(data_chain)] + data_chain)
+/// ```
 pub fn compute_program_hash_chain(
     program: &StrippedProgram,
     bootloader_version: usize,

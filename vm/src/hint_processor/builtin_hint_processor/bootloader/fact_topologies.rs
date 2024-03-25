@@ -140,6 +140,7 @@ pub fn compute_fact_topologies<'a>(
     Ok(plain_fact_topologies)
 }
 
+/// ```text
 /// Adds page to the output builtin for the specified fact topology.
 ///
 /// * `fact_topology`: Fact topology.
@@ -156,6 +157,7 @@ pub fn compute_fact_topologies<'a>(
 ///         offset += page_size
 ///
 ///     return len(fact_topology.page_sizes)
+/// ```
 fn add_consecutive_output_pages(
     fact_topology: &FactTopology,
     output_builtin: &mut OutputBuiltinRunner,
@@ -352,7 +354,7 @@ pub fn get_program_task_fact_topology(
         }
     };
     let fact_topology = get_fact_topology_from_additional_data(output_size, &additional_data)?;
-    output_builtin.set_state(output_runner_data);
+    output_builtin.set_state(output_runner_data.into());
 
     Ok(fact_topology)
 }

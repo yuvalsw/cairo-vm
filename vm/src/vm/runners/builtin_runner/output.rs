@@ -18,6 +18,16 @@ pub struct OutputBuiltinState {
     pub attributes: Attributes,
 }
 
+impl From<OutputBuiltinAdditionalData> for OutputBuiltinState {
+    fn from(additional_data: OutputBuiltinAdditionalData) -> Self {
+        OutputBuiltinState {
+            base: additional_data.base,
+            pages: additional_data.pages,
+            attributes: additional_data.attributes,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct OutputBuiltinRunner {
     pub(crate) base: usize,

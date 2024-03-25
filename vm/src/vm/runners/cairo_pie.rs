@@ -261,7 +261,7 @@ mod serde_impl {
     use num_traits::Num;
     use serde::ser::SerializeMap;
 
-    use super::{CairoPieMemory, SegmentInfo, CAIRO_PIE_VERSION};
+    use super::{CairoPieMemory, SegmentInfo};
     use crate::stdlib::prelude::{String, Vec};
     use crate::{
         types::relocatable::{MaybeRelocatable, Relocatable},
