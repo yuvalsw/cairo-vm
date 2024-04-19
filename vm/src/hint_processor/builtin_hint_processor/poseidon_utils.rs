@@ -8,7 +8,7 @@ use crate::{
     vm::{errors::hint_errors::HintError, vm_core::VirtualMachine},
 };
 
-use super::hint_utils::{get_integer_from_var_name, insert_value_into_ap};
+use super::hint_utils::{get_integer_from_var_name, get_ptr_from_var_name, insert_value_into_ap};
 use num_traits::ToPrimitive;
 
 // Implements hint: "memory[ap] = to_felt_or_relocatable(ids.n >= 10)"
@@ -37,6 +37,19 @@ pub fn n_greater_than_2(
     insert_value_into_ap(vm, value)
 }
 
+// Implements hint: "memory[ap] = to_felt_or_relocatable(ids.elements_end - ids.elements >= x)"
+pub fn elements_over_x(
+    vm: &mut VirtualMachine,
+    ids_data: &HashMap<String, HintReference>,
+    ap_tracking: &ApTracking,
+    x: usize,
+) -> Result<(), HintError> {
+    let elements_end = get_ptr_from_var_name("elements_end", vm, ids_data, ap_tracking)?;
+    let elements = get_ptr_from_var_name("elements", vm, ids_data, ap_tracking)?;
+    let value = Felt252::from(((elements_end - elements)? >= x) as usize);
+    insert_value_into_ap(vm, value)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::any_box;
@@ -44,8 +57,6 @@ mod tests {
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData;
     use crate::hint_processor::hint_processor_definition::HintProcessorLogic;
     use crate::hint_processor::hint_processor_definition::HintReference;
-    use crate::stdlib::collections::HashMap;
-    use crate::types::exec_scope::ExecutionScopes;
     use crate::vm::vm_core::VirtualMachine;
 
     use crate::{hint_processor::builtin_hint_processor::hint_code, utils::test_utils::*};

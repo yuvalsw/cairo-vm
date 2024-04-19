@@ -23,7 +23,7 @@ pub fn set_add(
     let elm_size =
         get_integer_from_var_name("elm_size", vm, ids_data, ap_tracking).and_then(|x| {
             x.to_usize()
-                .ok_or_else(|| MathError::Felt252ToUsizeConversion(Box::new(x.into_owned())).into())
+                .ok_or_else(|| MathError::Felt252ToUsizeConversion(Box::new(x)).into())
         })?;
     let elm_ptr = get_ptr_from_var_name("elm_ptr", vm, ids_data, ap_tracking)?;
     let set_end_ptr = get_ptr_from_var_name("set_end_ptr", vm, ids_data, ap_tracking)?;
@@ -66,7 +66,7 @@ mod tests {
             },
             hint_processor_definition::HintProcessorLogic,
         },
-        types::{exec_scope::ExecutionScopes, relocatable::MaybeRelocatable},
+        types::relocatable::MaybeRelocatable,
         utils::test_utils::*,
         vm::vm_core::VirtualMachine,
     };

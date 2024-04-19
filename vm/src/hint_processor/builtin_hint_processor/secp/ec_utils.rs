@@ -198,6 +198,7 @@ pub fn compute_slope_and_assing_secp_p(
         ap_tracking,
         point0_alias,
         point1_alias,
+        "SECP_P",
     )
 }
 
@@ -208,13 +209,14 @@ pub fn compute_slope(
     ap_tracking: &ApTracking,
     point0_alias: &str,
     point1_alias: &str,
+    secp_p_name: &str,
 ) -> Result<(), HintError> {
     //ids.point0
     let point0 = EcPoint::from_var_name(point0_alias, vm, ids_data, ap_tracking)?;
     //ids.point1
     let point1 = EcPoint::from_var_name(point1_alias, vm, ids_data, ap_tracking)?;
 
-    let secp_p: BigInt = exec_scopes.get("SECP_P")?;
+    let secp_p: BigInt = exec_scopes.get(secp_p_name)?;
 
     let value = line_slope(
         &(point0.x.pack86(), point0.y.pack86()),

@@ -12,6 +12,7 @@ use super::{
         ec_recover_sub_a_b,
     },
     field_arithmetic::{u256_get_square_root, u384_get_square_root, uint384_div},
+    mod_circuit::{run_p_mod_circuit, run_p_mod_circuit_with_large_batch_size},
     secp::{
         ec_utils::{
             compute_doubling_slope_external_consts, compute_slope_and_assing_secp_p,
@@ -75,7 +76,7 @@ use crate::{
             math_utils::*,
             memcpy_hint_utils::{add_segment, enter_scope, exit_scope, memcpy_enter_scope},
             memset_utils::{memset_enter_scope, memset_step_loop},
-            poseidon_utils::{n_greater_than_10, n_greater_than_2},
+            poseidon_utils::{elements_over_x, n_greater_than_10, n_greater_than_2},
             pow_utils::pow,
             secp::{
                 bigint_utils::{bigint_to_uint256, hi_max_bitlen, nondet_bigint3},
@@ -136,6 +137,9 @@ use crate::hint_processor::builtin_hint_processor::skip_next_instruction::skip_n
 
 #[cfg(feature = "print")]
 use crate::hint_processor::builtin_hint_processor::print::{print_array, print_dict, print_felt};
+use crate::hint_processor::builtin_hint_processor::secp::secp_utils::{
+    SECP256R1_ALPHA, SECP256R1_P,
+};
 
 use super::blake2s_utils::example_blake2s_compress;
 
@@ -549,6 +553,15 @@ impl HintProcessorLogic for BuiltinHintProcessor {
                 &SECP_P,
                 &ALPHA,
             ),
+            hint_code::EC_DOUBLE_SLOPE_V4 => compute_doubling_slope(
+                vm,
+                exec_scopes,
+                &hint_data.ids_data,
+                &hint_data.ap_tracking,
+                "point",
+                &SECP256R1_P,
+                &SECP256R1_ALPHA,
+            ),
             hint_code::EC_DOUBLE_SLOPE_EXTERNAL_CONSTS => compute_doubling_slope_external_consts(
                 vm,
                 exec_scopes,
@@ -576,13 +589,23 @@ impl HintProcessorLogic for BuiltinHintProcessor {
                 "point1",
                 &SECP_P_V2,
             ),
-            hint_code::COMPUTE_SLOPE_SECP256R1 => compute_slope(
+            hint_code::COMPUTE_SLOPE_SECP256R1_V1 => compute_slope(
                 vm,
                 exec_scopes,
                 &hint_data.ids_data,
                 &hint_data.ap_tracking,
                 "point0",
                 "point1",
+                "SECP_P",
+            ),
+            hint_code::COMPUTE_SLOPE_SECP256R1_V2 => compute_slope(
+                vm,
+                exec_scopes,
+                &hint_data.ids_data,
+                &hint_data.ap_tracking,
+                "point0",
+                "point1",
+                "SECP256R1_P",
             ),
             hint_code::IMPORT_SECP256R1_P => import_secp256r1_p(exec_scopes),
             hint_code::COMPUTE_SLOPE_WHITELIST => compute_slope_and_assing_secp_p(
@@ -748,6 +771,12 @@ impl HintProcessorLogic for BuiltinHintProcessor {
             }
             hint_code::NONDET_N_GREATER_THAN_2 => {
                 n_greater_than_2(vm, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::NONDET_ELEMENTS_OVER_TEN => {
+                elements_over_x(vm, &hint_data.ids_data, &hint_data.ap_tracking, 10)
+            }
+            hint_code::NONDET_ELEMENTS_OVER_TWO => {
+                elements_over_x(vm, &hint_data.ids_data, &hint_data.ap_tracking, 2)
             }
             hint_code::RANDOM_EC_POINT => {
                 random_ec_point_hint(vm, &hint_data.ids_data, &hint_data.ap_tracking)
@@ -931,6 +960,17 @@ impl HintProcessorLogic for BuiltinHintProcessor {
                 &hint_data.ids_data,
                 &hint_data.ap_tracking,
             ),
+            hint_code::RUN_P_CIRCUIT => {
+                run_p_mod_circuit(vm, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
+            hint_code::RUN_P_CIRCUIT_WITH_LARGE_BATCH_SIZE => {
+                run_p_mod_circuit_with_large_batch_size(
+                    vm,
+                    &hint_data.ids_data,
+                    &hint_data.ap_tracking,
+                    constants,
+                )
+            }
             #[cfg(feature = "skip_next_instruction_hint")]
             hint_code::SKIP_NEXT_INSTRUCTION => skip_next_instruction(vm),
             #[cfg(feature = "print")]

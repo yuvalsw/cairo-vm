@@ -17,6 +17,7 @@ pub mod keccak_utils;
 pub mod math_utils;
 pub mod memcpy_hint_utils;
 pub mod memset_utils;
+mod mod_circuit;
 pub mod poseidon_utils;
 pub mod pow_utils;
 #[cfg(feature = "print")]

@@ -63,6 +63,7 @@ There are some other, more rare cases of reference values found when implementin
 
 * ```cast(number, felt)```
 * ```[cast(reg + offset1 + offset2, type)]```
+* ```[cast([[reg + offset1] + offset2], type)]```
 
 ## To do
 For the moment the type of the reference is not being used, this will be included in the future to make the hints code cleaner.

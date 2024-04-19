@@ -694,6 +694,15 @@ x = pack(ids.pt.x, PRIME)
 y = pack(ids.pt.y, PRIME)
 value = slope = div_mod(3 * x ** 2, 2 * y, SECP_P)"#;
 
+pub const EC_DOUBLE_SLOPE_V4: &str = r#"from starkware.cairo.common.cairo_secp.secp256r1_utils import SECP256R1_ALPHA, SECP256R1_P
+from starkware.cairo.common.cairo_secp.secp_utils import pack
+from starkware.python.math_utils import ec_double_slope
+
+# Compute the slope.
+x = pack(ids.point.x, SECP256R1_P)
+y = pack(ids.point.y, SECP256R1_P)
+value = slope = ec_double_slope(point=(x, y), alpha=SECP256R1_ALPHA, p=SECP256R1_P)"#;
+
 pub const EC_DOUBLE_SLOPE_EXTERNAL_CONSTS: &str = r#"from starkware.cairo.common.cairo_secp.secp_utils import pack
 from starkware.python.math_utils import ec_double_slope
 
@@ -722,7 +731,7 @@ x1 = pack(ids.point1.x, PRIME)
 y1 = pack(ids.point1.y, PRIME)
 value = slope = line_slope(point1=(x0, y0), point2=(x1, y1), p=SECP_P)"#;
 
-pub const COMPUTE_SLOPE_SECP256R1: &str = r#"from starkware.cairo.common.cairo_secp.secp_utils import pack
+pub const COMPUTE_SLOPE_SECP256R1_V1: &str = r#"from starkware.cairo.common.cairo_secp.secp_utils import pack
 from starkware.python.math_utils import line_slope
 
 # Compute the slope.
@@ -731,6 +740,17 @@ y0 = pack(ids.point0.y, PRIME)
 x1 = pack(ids.point1.x, PRIME)
 y1 = pack(ids.point1.y, PRIME)
 value = slope = line_slope(point1=(x0, y0), point2=(x1, y1), p=SECP_P)"#;
+
+pub const COMPUTE_SLOPE_SECP256R1_V2: &str = r#"from starkware.cairo.common.cairo_secp.secp256r1_utils import SECP256R1_P
+from starkware.cairo.common.cairo_secp.secp_utils import pack
+from starkware.python.math_utils import line_slope
+
+# Compute the slope.
+x0 = pack(ids.point0.x, PRIME)
+y0 = pack(ids.point0.y, PRIME)
+x1 = pack(ids.point1.x, PRIME)
+y1 = pack(ids.point1.y, PRIME)
+value = slope = line_slope(point1=(x0, y0), point2=(x1, y1), p=SECP256R1_P)"#;
 
 pub const IMPORT_SECP256R1_P: &str =
     "from starkware.cairo.common.cairo_secp.secp256r1_utils import SECP256R1_P as SECP_P";
@@ -1630,3 +1650,12 @@ if ids.select_builtin:
 
 pub const SELECT_BUILTINS_ENTER_SCOPE: &str =
     "vm_enter_scope({'n_selected_builtins': ids.n_selected_builtins})";
+
+pub const RUN_P_CIRCUIT: &str = "from starkware.cairo.lang.builtins.modulo.mod_builtin_runner import ModBuiltinRunner\nassert builtin_runners[\"add_mod_builtin\"].instance_def.batch_size == 1\nassert builtin_runners[\"mul_mod_builtin\"].instance_def.batch_size == 1\n\nModBuiltinRunner.fill_memory(\n    memory=memory,\n    add_mod=(ids.add_mod_ptr.address_, builtin_runners[\"add_mod_builtin\"], ids.add_mod_n),\n    mul_mod=(ids.mul_mod_ptr.address_, builtin_runners[\"mul_mod_builtin\"], ids.mul_mod_n),\n)";
+
+pub const RUN_P_CIRCUIT_WITH_LARGE_BATCH_SIZE: &str = "from starkware.cairo.lang.builtins.modulo.mod_builtin_runner import ModBuiltinRunner\nassert builtin_runners[\"add_mod_builtin\"].instance_def.batch_size == ids.BATCH_SIZE\nassert builtin_runners[\"mul_mod_builtin\"].instance_def.batch_size == ids.BATCH_SIZE\n\nModBuiltinRunner.fill_memory(\n    memory=memory,\n    add_mod=(ids.add_mod_ptr.address_, builtin_runners[\"add_mod_builtin\"], ids.add_mod_n),\n    mul_mod=(ids.mul_mod_ptr.address_, builtin_runners[\"mul_mod_builtin\"], ids.mul_mod_n),\n)";
+
+pub const NONDET_ELEMENTS_OVER_TEN: &str =
+    "memory[ap] = to_felt_or_relocatable(ids.elements_end - ids.elements >= 10)";
+pub const NONDET_ELEMENTS_OVER_TWO: &str =
+    "memory[ap] = to_felt_or_relocatable(ids.elements_end - ids.elements >= 2)";

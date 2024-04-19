@@ -45,7 +45,7 @@ mod tests {
             builtin_hint_processor::builtin_hint_processor_definition::HintProcessorData,
             hint_processor_definition::HintProcessorLogic,
         },
-        types::{exec_scope::ExecutionScopes, relocatable::MaybeRelocatable},
+        types::relocatable::MaybeRelocatable,
         utils::test_utils::*,
         vm::{errors::memory_errors::MemoryError, vm_core::VirtualMachine},
     };

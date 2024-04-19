@@ -8,11 +8,12 @@ pub(crate) struct PoseidonInstanceDef {
     pub(crate) ratio: Option<u32>,
 }
 
-impl PoseidonInstanceDef {
-    pub(crate) fn default() -> Self {
+impl Default for PoseidonInstanceDef {
+    fn default() -> Self {
         PoseidonInstanceDef { ratio: Some(32) }
     }
-
+}
+impl PoseidonInstanceDef {
     pub(crate) fn new(ratio: Option<u32>) -> Self {
         PoseidonInstanceDef { ratio }
     }

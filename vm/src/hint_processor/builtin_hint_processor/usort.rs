@@ -43,7 +43,7 @@ pub fn usort_body(
         if input_len_u64 > usort_max_size {
             return Err(HintError::UsortOutOfRange(Box::new((
                 usort_max_size,
-                input_len.into_owned(),
+                input_len,
             ))));
         }
     }
@@ -98,7 +98,7 @@ pub fn verify_usort(
     ids_data: &HashMap<String, HintReference>,
     ap_tracking: &ApTracking,
 ) -> Result<(), HintError> {
-    let value = get_integer_from_var_name("value", vm, ids_data, ap_tracking)?.clone();
+    let value = get_integer_from_var_name("value", vm, ids_data, ap_tracking)?;
     let mut positions = exec_scopes
         .get_mut_dict_ref::<Felt252, Vec<u64>>("positions_dict")?
         .remove(value.as_ref())

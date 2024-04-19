@@ -121,14 +121,9 @@ pub mod test_utils {
     macro_rules! segments {
         ($( (($si:expr, $off:expr), $val:tt) ),* $(,)? ) => {
             {
-                let memory = memory!($( (($si, $off), $val) ),*);
-                $crate::vm::vm_memory::memory_segments::MemorySegmentManager {
-                    memory,
-                    segment_sizes: HashMap::new(),
-                    segment_used_sizes: None,
-                    public_memory_offsets: HashMap::new(),
-                }
-
+                let mut segments = $crate::vm::vm_memory::memory_segments::MemorySegmentManager::new();
+                segments.memory = memory!($( (($si, $off), $val) ),*);
+                segments
             }
 
         };
@@ -241,8 +236,11 @@ pub mod test_utils {
         () => {{
             let mut vm = VirtualMachine::new(false);
             vm.builtin_runners = vec![
-                $crate::vm::runners::builtin_runner::RangeCheckBuiltinRunner::new(Some(8), 8, true)
-                    .into(),
+                $crate::vm::runners::builtin_runner::RangeCheckBuiltinRunner::<8>::new(
+                    Some(8),
+                    true,
+                )
+                .into(),
             ];
             vm
         }};
@@ -251,7 +249,12 @@ pub mod test_utils {
 
     macro_rules! cairo_runner {
         ($program:expr) => {
-            CairoRunner::new(&$program, "all_cairo", false).unwrap()
+            CairoRunner::new(
+                &$program,
+                crate::types::layout_name::LayoutName::all_cairo,
+                false,
+            )
+            .unwrap()
         };
         ($program:expr, $layout:expr) => {
             CairoRunner::new(&$program, $layout, false).unwrap()
@@ -442,7 +445,7 @@ pub mod test_utils {
 
     macro_rules! exec_scopes_ref {
         () => {
-            &mut ExecutionScopes::new()
+            &mut crate::types::exec_scope::ExecutionScopes::new()
         };
     }
     pub(crate) use exec_scopes_ref;

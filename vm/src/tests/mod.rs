@@ -1,3 +1,4 @@
+use crate::types::layout_name::LayoutName;
 #[cfg(feature = "cairo-1-hints")]
 use crate::vm::errors::cairo_run_errors::CairoRunError;
 #[cfg(feature = "cairo-1-hints")]
@@ -48,33 +49,35 @@ mod skip_instruction_test;
 //For simple programs that should just succeed and have no special needs.
 //Checks memory holes == 0
 fn run_program_simple(data: &[u8]) {
-    run_program(data, Some("all_cairo"), None, None)
+    run_program(data, false, None, None, None)
 }
 
 //For simple programs that should just succeed but using small layout.
 fn run_program_small(data: &[u8]) {
-    run_program(data, Some("small"), None, None)
+    run_program(data, false, Some(LayoutName::small), None, None)
 }
 
 fn run_program_with_trace(data: &[u8], trace: &[(usize, usize, usize)]) {
-    run_program(data, Some("all_cairo"), Some(trace), None)
+    run_program(data, false, None, Some(trace), None)
 }
 
 fn run_program_with_error(data: &[u8], error: &str) {
-    run_program(data, Some("all_cairo"), None, Some(error))
+    run_program(data, false, None, None, Some(error))
 }
 
 fn run_program(
     data: &[u8],
-    layout: Option<&str>,
+    proof_mode: bool,
+    layout: Option<LayoutName>,
     trace: Option<&[(usize, usize, usize)]>,
     error: Option<&str>,
 ) {
     let mut hint_executor = BuiltinHintProcessor::new_empty();
     let cairo_run_config = CairoRunConfig {
-        layout: layout.unwrap_or("all_cairo"),
+        layout: layout.unwrap_or(LayoutName::all_cairo),
         relocate_mem: true,
         trace_enabled: true,
+        proof_mode,
         ..Default::default()
     };
     let res = cairo_run(data, &cairo_run_config, &mut hint_executor);
@@ -113,7 +116,7 @@ fn run_cairo_1_entrypoint(
 
     let mut runner = CairoRunner::new(
         &(contract_class.clone().try_into().unwrap()),
-        "all_cairo",
+        LayoutName::all_cairo,
         false,
     )
     .unwrap();
@@ -215,7 +218,7 @@ fn run_cairo_1_entrypoint_with_run_resources(
 ) -> Result<Vec<Felt252>, CairoRunError> {
     let mut runner = CairoRunner::new(
         &(contract_class.clone().try_into().unwrap()),
-        "all_cairo",
+        LayoutName::all_cairo,
         false,
     )
     .unwrap();

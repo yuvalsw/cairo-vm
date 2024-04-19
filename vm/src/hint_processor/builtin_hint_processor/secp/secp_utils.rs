@@ -106,20 +106,17 @@ mod tests {
         constants.insert(BASE_86.to_string(), crate::math_utils::pow2_const(86));
 
         let array_1 = bigint3_split(&BigUint::zero());
-        #[allow(deprecated)]
         let array_2 = bigint3_split(
             &bigint!(999992)
                 .to_biguint()
                 .expect("Couldn't convert to BigUint"),
         );
-        #[allow(deprecated)]
         let array_3 = bigint3_split(
             &bigint_str!("7737125245533626718119526477371252455336267181195264773712524553362")
                 .to_biguint()
                 .expect("Couldn't convert to BigUint"),
         );
         //TODO, Check SecpSplitutOfRange limit
-        #[allow(deprecated)]
         let array_4 = bigint3_split(
             &bigint_str!(
                 "773712524553362671811952647737125245533626718119526477371252455336267181195264"

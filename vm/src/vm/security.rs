@@ -87,7 +87,6 @@ mod test {
     use super::*;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
     use crate::serde::deserialize_program::BuiltinName;
-    use crate::stdlib::collections::HashMap;
 
     use crate::types::relocatable::Relocatable;
 

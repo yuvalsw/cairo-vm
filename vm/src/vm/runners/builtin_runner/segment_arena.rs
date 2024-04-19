@@ -1,7 +1,4 @@
-use crate::stdlib::boxed::Box;
 use crate::vm::errors::memory_errors::MemoryError;
-use crate::vm::errors::runner_errors::RunnerError;
-use crate::vm::vm_memory::memory::Memory;
 use crate::{
     types::relocatable::{MaybeRelocatable, Relocatable},
     vm::vm_memory::memory_segments::MemorySegmentManager,
@@ -9,19 +6,16 @@ use crate::{
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+use num_integer::div_ceil;
 
-use super::SEGMENT_ARENA_BUILTIN_NAME;
-
-const ARENA_BUILTIN_SIZE: u32 = 3;
+pub(crate) const ARENA_BUILTIN_SIZE: u32 = 3;
 // The size of the builtin segment at the time of its creation.
 const INITIAL_SEGMENT_SIZE: usize = ARENA_BUILTIN_SIZE as usize;
 
 #[derive(Debug, Clone)]
 pub struct SegmentArenaBuiltinRunner {
     base: Relocatable,
-    included: bool,
-    pub(crate) cells_per_instance: u32,
-    pub(crate) n_input_cells_per_instance: u32,
+    pub(crate) included: bool,
     pub(crate) stop_ptr: Option<usize>,
 }
 
@@ -30,8 +24,6 @@ impl SegmentArenaBuiltinRunner {
         SegmentArenaBuiltinRunner {
             base: Relocatable::from((0, 0)),
             included,
-            cells_per_instance: ARENA_BUILTIN_SIZE,
-            n_input_cells_per_instance: ARENA_BUILTIN_SIZE,
             stop_ptr: None,
         }
     }
@@ -65,60 +57,14 @@ impl SegmentArenaBuiltinRunner {
         }
     }
 
-    pub fn final_stack(
-        &mut self,
-        segments: &MemorySegmentManager,
-        pointer: Relocatable,
-    ) -> Result<Relocatable, RunnerError> {
-        if self.included {
-            let stop_pointer_addr = (pointer - 1)
-                .map_err(|_| RunnerError::NoStopPointer(Box::new(SEGMENT_ARENA_BUILTIN_NAME)))?;
-            let stop_pointer = segments
-                .memory
-                .get_relocatable(stop_pointer_addr)
-                .map_err(|_| RunnerError::NoStopPointer(Box::new(SEGMENT_ARENA_BUILTIN_NAME)))?;
-            if self.base.segment_index != stop_pointer.segment_index {
-                return Err(RunnerError::InvalidStopPointerIndex(Box::new((
-                    SEGMENT_ARENA_BUILTIN_NAME,
-                    stop_pointer,
-                    self.base.segment_index as usize,
-                ))));
-            }
-            let used = self.get_used_cells(segments).map_err(RunnerError::Memory)?;
-            if stop_pointer != (self.base + used)? {
-                return Err(RunnerError::InvalidStopPointer(Box::new((
-                    SEGMENT_ARENA_BUILTIN_NAME,
-                    (self.base + used)?,
-                    stop_pointer,
-                ))));
-            }
-            self.stop_ptr = Some(stop_pointer.offset);
-            Ok(stop_pointer_addr)
-        } else {
-            self.stop_ptr = Some(self.base.offset);
-            Ok(pointer)
-        }
-    }
-
     pub fn get_used_instances(
         &self,
         segments: &MemorySegmentManager,
     ) -> Result<usize, MemoryError> {
-        self.get_used_cells(segments)
-    }
-
-    pub fn get_memory_segment_addresses(&self) -> (usize, Option<usize>) {
-        (self.base.segment_index as usize, self.stop_ptr)
-    }
-
-    pub fn add_validation_rule(&self, _memory: &mut Memory) {}
-
-    pub fn deduce_memory_cell(
-        &self,
-        _address: Relocatable,
-        _memory: &Memory,
-    ) -> Result<Option<MaybeRelocatable>, RunnerError> {
-        Ok(None)
+        Ok(div_ceil(
+            self.get_used_cells(segments)?,
+            ARENA_BUILTIN_SIZE as usize,
+        ))
     }
 
     pub fn base(&self) -> usize {
@@ -142,9 +88,12 @@ fn gen_arg(segments: &mut MemorySegmentManager, data: &[MaybeRelocatable; 3]) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stdlib::collections::HashMap;
+    use crate::vm::errors::runner_errors::RunnerError;
+    use crate::vm::runners::builtin_runner::SEGMENT_ARENA_BUILTIN_NAME;
     use crate::vm::vm_core::VirtualMachine;
     use crate::{relocatable, utils::test_utils::*, vm::runners::builtin_runner::BuiltinRunner};
+    #[cfg(not(feature = "std"))]
+    use alloc::boxed::Box;
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::*;
 
@@ -187,7 +136,7 @@ mod tests {
     #[test]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     fn final_stack_error_stop_pointer() {
-        let mut builtin = SegmentArenaBuiltinRunner::new(true);
+        let mut builtin: BuiltinRunner = SegmentArenaBuiltinRunner::new(true).into();
 
         let mut vm = vm!();
 
@@ -214,7 +163,7 @@ mod tests {
     #[test]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     fn final_stack_valid() {
-        let mut builtin = SegmentArenaBuiltinRunner::new(false);
+        let mut builtin: BuiltinRunner = SegmentArenaBuiltinRunner::new(false).into();
 
         let mut vm = vm!();
 
@@ -262,7 +211,7 @@ mod tests {
     #[test]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     fn final_stack_error_non_relocatable() {
-        let mut builtin = SegmentArenaBuiltinRunner::new(true);
+        let mut builtin: BuiltinRunner = SegmentArenaBuiltinRunner::new(true).into();
 
         let mut vm = vm!();
 
@@ -324,43 +273,6 @@ mod tests {
 
     #[test]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn get_memory_segment_addresses() {
-        let builtin = SegmentArenaBuiltinRunner::new(true);
-
-        assert_eq!(builtin.get_memory_segment_addresses(), (0, None),);
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn get_memory_accesses_missing_segment_used_sizes() {
-        let builtin = BuiltinRunner::SegmentArena(SegmentArenaBuiltinRunner::new(true));
-        let vm = vm!();
-
-        assert_eq!(builtin.get_memory_accesses(&vm), Ok(vec![]),);
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn get_memory_accesses_empty() {
-        let builtin = BuiltinRunner::SegmentArena(SegmentArenaBuiltinRunner::new(true));
-        let mut vm = vm!();
-
-        vm.segments.segment_used_sizes = Some(vec![0]);
-        assert_eq!(builtin.get_memory_accesses(&vm), Ok(vec![]));
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn get_memory_accesses() {
-        let builtin = BuiltinRunner::SegmentArena(SegmentArenaBuiltinRunner::new(true));
-        let mut vm = vm!();
-
-        vm.segments.segment_used_sizes = Some(vec![4]);
-        assert_eq!(builtin.get_memory_accesses(&vm), Ok(vec![]),);
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     fn get_used_cells_missing_segment_used_sizes() {
         let builtin = BuiltinRunner::SegmentArena(SegmentArenaBuiltinRunner::new(true));
         let vm = vm!();
@@ -412,8 +324,8 @@ mod tests {
         let builtin = BuiltinRunner::SegmentArena(SegmentArenaBuiltinRunner::new(true));
         let mut memory_segment_manager = MemorySegmentManager::new();
         memory_segment_manager.segment_used_sizes = Some(vec![6]);
-
-        assert_eq!(builtin.get_used_instances(&memory_segment_manager), Ok(3));
+        // (SIZE(6) - INITIAL_SIZE(3)) / CELLS_PER_INSTANCE(3)
+        assert_eq!(builtin.get_used_instances(&memory_segment_manager), Ok(1));
     }
 
     #[test]
@@ -435,14 +347,6 @@ mod tests {
             builtin.deduce_memory_cell(pointer, &vm.segments.memory),
             Ok(None)
         );
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn test_add_validation_rule() {
-        let builtin = SegmentArenaBuiltinRunner::new(true);
-        let mut vm = vm!();
-        builtin.add_validation_rule(&mut vm.segments.memory);
     }
 
     #[test]
@@ -502,7 +406,7 @@ mod tests {
     fn get_air_private_input() {
         let builtin: BuiltinRunner = SegmentArenaBuiltinRunner::new(true).into();
 
-        let memory = memory![((0, 0), 0), ((0, 1), 1), ((0, 2), 2), ((0, 3), 3)];
-        assert!(builtin.air_private_input(&memory).is_empty());
+        let segments = segments![((0, 0), 0), ((0, 1), 1), ((0, 2), 2), ((0, 3), 3)];
+        assert!(builtin.air_private_input(&segments).is_empty());
     }
 }

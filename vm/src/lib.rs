@@ -5,7 +5,6 @@
 //! - `skip_next_instruction_hint`: Enable the `skip_next_instruction()` hint. Not enabled by default.
 //! - `hooks`: Enable [`Hooks`](crate::vm::hooks::Hooks) support for the [VirtualMachine](vm::vm_core::VirtualMachine). Not enabled by default.
 //! - `test_utils`: Enables test utils (`hooks` and `skip_next_instruction` features). Not enabled by default.
-//! - `with_mimalloc`: Use [`MiMalloc`](https://crates.io/crates/mimalloc) as the program global allocator.
 //! - `cairo-1-hints`: Enable hints that were introduced in Cairo 1. Not enabled by default.
 //! - `arbitrary`: Enables implementations of [`arbitrary::Arbitrary`](https://docs.rs/arbitrary/latest/arbitrary/) for some structs. Not enabled by default.
 
@@ -57,6 +56,7 @@ pub mod air_public_input;
 pub mod cairo_run;
 pub mod hint_processor;
 pub mod math_utils;
+pub mod program_hash;
 pub mod serde;
 pub mod types;
 pub mod utils;

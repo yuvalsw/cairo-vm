@@ -9,6 +9,6 @@ keywords.workspace = true
 
 
 [dependencies]
-cairo-vm = { workspace = true }
+cairo-vm = { workspace = true, features = ["std"] }
 rayon = "1.9.0"
 tracing = "0.1.40"

@@ -1,4 +1,4 @@
-use crate::stdlib::{borrow::Cow, boxed::Box, collections::HashMap, prelude::*};
+use crate::stdlib::{boxed::Box, collections::HashMap, prelude::*};
 
 use crate::Felt252;
 
@@ -83,12 +83,12 @@ pub fn get_relocatable_from_var_name(
 //Gets the value of a variable name.
 //If the value is an MaybeRelocatable::Int(Bigint) return &Bigint
 //else raises Err
-pub fn get_integer_from_var_name<'a>(
-    var_name: &'a str,
-    vm: &'a VirtualMachine,
-    ids_data: &'a HashMap<String, HintReference>,
+pub fn get_integer_from_var_name(
+    var_name: &str,
+    vm: &VirtualMachine,
+    ids_data: &HashMap<String, HintReference>,
     ap_tracking: &ApTracking,
-) -> Result<Cow<'a, Felt252>, HintError> {
+) -> Result<Felt252, HintError> {
     let reference = get_reference_from_var_name(var_name, ids_data)?;
     match get_integer_from_reference(vm, reference, ap_tracking) {
         // Map internal errors into more descriptive variants
@@ -260,7 +260,7 @@ mod tests {
 
         assert_matches!(
             get_integer_from_var_name("value", &vm, &ids_data, &ApTracking::new()),
-            Ok(Cow::Borrowed(x)) if x == &Felt252::from(1)
+            Ok(x) if x == Felt252::from(1)
         );
     }
 

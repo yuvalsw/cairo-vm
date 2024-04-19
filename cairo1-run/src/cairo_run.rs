@@ -1,4 +1,6 @@
-use cairo_lang_casm::{casm, casm_extend, hints::Hint, instructions::Instruction};
+use cairo_lang_casm::{
+    casm, casm_extend, hints::Hint, inline::CasmContext, instructions::Instruction,
+};
 use cairo_lang_sierra::{
     extensions::{
         bitwise::BitwiseType,
@@ -23,14 +25,14 @@ use cairo_lang_sierra_to_casm::{
     metadata::{calc_metadata, Metadata, MetadataComputationConfig, MetadataError},
 };
 use cairo_lang_sierra_type_size::get_type_size_map;
-use cairo_lang_utils::unordered_hash_map::UnorderedHashMap;
+use cairo_lang_utils::{casts::IntoOrPanic, unordered_hash_map::UnorderedHashMap};
 use cairo_vm::{
     hint_processor::cairo_1_hint_processor::hint_processor::Cairo1HintProcessor,
     math_utils::signed_felt,
     serde::deserialize_program::{
         ApTracking, BuiltinName, FlowTrackingData, HintParams, ReferenceManager,
     },
-    types::{program::Program, relocatable::MaybeRelocatable},
+    types::{layout_name::LayoutName, program::Program, relocatable::MaybeRelocatable},
     vm::{
         errors::{runner_errors::RunnerError, vm_errors::VirtualMachineError},
         runners::{
@@ -46,7 +48,7 @@ use cairo_vm::{
 };
 use itertools::{chain, Itertools};
 use num_traits::{cast::ToPrimitive, Zero};
-use std::{collections::HashMap, iter::Peekable, slice::Iter};
+use std::{collections::HashMap, iter::Peekable};
 
 use crate::{Error, FuncArg};
 
@@ -57,7 +59,7 @@ pub struct Cairo1RunConfig<'a> {
     pub serialize_output: bool,
     pub trace_enabled: bool,
     pub relocate_mem: bool,
-    pub layout: &'a str,
+    pub layout: LayoutName,
     pub proof_mode: bool,
     // Should be true if either air_public_input or cairo_pie_output are needed
     // Sets builtins stop_ptr by calling `final_stack` on each builtin
@@ -73,7 +75,7 @@ impl Default for Cairo1RunConfig<'_> {
             serialize_output: false,
             trace_enabled: false,
             relocate_mem: false,
-            layout: "plain",
+            layout: LayoutName::plain,
             proof_mode: false,
             finalize_builtins: false,
             append_return_values: false,
@@ -114,8 +116,7 @@ pub fn cairo_run_program(
         &type_sizes,
         main_func,
         initial_gas,
-        cairo_run_config.proof_mode || cairo_run_config.append_return_values,
-        cairo_run_config.args,
+        &cairo_run_config,
     )?;
 
     // Fetch return type data
@@ -131,22 +132,12 @@ pub fn cairo_run_program(
 
     // This footer is used by lib funcs
     let libfunc_footer = create_code_footer();
-
-    // Header used to initiate the infinite loop after executing the program
-    // Also appends return values to output segment
-    let proof_mode_header = if cairo_run_config.proof_mode {
-        create_proof_mode_header(builtins.len() as i16, return_type_size)
-    } else if cairo_run_config.append_return_values {
-        create_append_return_values_header(builtins.len() as i16, return_type_size)
-    } else {
-        casm! {}.instructions
-    };
+    let builtin_count: i16 = builtins.len().into_or_panic();
 
     // This is the program we are actually running/proving
     // With (embedded proof mode), cairo1 header and the libfunc footer
     let instructions = chain!(
-        proof_mode_header.iter(),
-        entry_code.iter(),
+        entry_code.instructions.iter(),
         casm_program.instructions.iter(),
         libfunc_footer.iter(),
     );
@@ -165,12 +156,12 @@ pub fn cairo_run_program(
 
     let program = if cairo_run_config.proof_mode {
         Program::new_for_proof(
-            builtins,
+            builtins.clone(),
             data,
             0,
             // Proof mode is on top
-            // jmp rel 0 is on PC == 2
-            2,
+            // `jmp rel 0` is the last line of the entry code.
+            entry_code.current_code_offset - 2,
             program_hints,
             ReferenceManager {
                 references: Vec::new(),
@@ -181,7 +172,7 @@ pub fn cairo_run_program(
         )?
     } else {
         Program::new(
-            builtins,
+            builtins.clone(),
             data,
             Some(0),
             program_hints,
@@ -212,17 +203,17 @@ pub fn cairo_run_program(
         runner.run_for_steps(1, &mut vm, &mut hint_processor)?;
     }
 
-    if cairo_run_config.proof_mode || cairo_run_config.append_return_values {
-        // As we will be inserting the return values into the output segment after running the main program (right before the infinite loop) the computed size for the output builtin will be 0
-        // We need to manually set the segment size for the output builtin's segment so memory hole counting doesn't fail due to having a higher accessed address count than the segment's size
-        vm.segments
-            .segment_sizes
-            .insert(2, return_type_size as usize);
-    }
     runner.end_run(false, false, &mut vm, &mut hint_processor)?;
 
+    let skip_output = cairo_run_config.proof_mode || cairo_run_config.append_return_values;
     // Fetch return values
-    let return_values = fetch_return_values(return_type_size, return_type_id, &vm)?;
+    let return_values = fetch_return_values(
+        return_type_size,
+        return_type_id,
+        &vm,
+        builtin_count,
+        skip_output,
+    )?;
 
     let serialized_output = if cairo_run_config.serialize_output {
         Some(serialize_output(
@@ -238,16 +229,28 @@ pub fn cairo_run_program(
 
     // Set stop pointers for builtins so we can obtain the air public input
     if cairo_run_config.finalize_builtins {
-        finalize_builtins(
-            cairo_run_config.proof_mode || cairo_run_config.append_return_values,
-            &main_func.signature.ret_types,
-            &type_sizes,
-            &mut vm,
-        )?;
-
-        if cairo_run_config.proof_mode || cairo_run_config.append_return_values {
-            // As the output builtin is not used by the program we need to compute it's stop ptr manually
-            vm.set_output_stop_ptr_offset(return_type_size as usize);
+        if skip_output {
+            // Set stop pointer for each builtin
+            vm.builtins_final_stack_from_stack_pointer_dict(
+                &builtins
+                    .iter()
+                    .enumerate()
+                    .map(|(i, builtin)| {
+                        (
+                            builtin.name(),
+                            (vm.get_ap() - (builtins.len() - 1 - i)).unwrap(),
+                        )
+                    })
+                    .collect(),
+                false,
+            )?;
+        } else {
+            finalize_builtins(
+                &main_func.signature.ret_types,
+                &type_sizes,
+                &mut vm,
+                builtin_count,
+            )?;
         }
 
         // Build execution public memory
@@ -338,71 +341,6 @@ fn create_code_footer() -> Vec<Instruction> {
     .instructions
 }
 
-// Create proof_mode specific instructions
-// Including the "canonical" proof mode instructions (the ones added by the compiler in cairo 0)
-// wich call the firt program instruction and then initiate an infinite loop.
-// And also appending the return values to the output builtin's memory segment
-fn create_proof_mode_header(builtin_count: i16, return_type_size: i16) -> Vec<Instruction> {
-    // As the output builtin is not used by cairo 1 (we forced it for this purpose), it's segment is always empty
-    // so we can start writing values directly from it's base, which is located relative to the fp before the other builtin's bases
-    let output_fp_offset: i16 = -(builtin_count + 2); // The 2 here represents the return_fp & end segments
-
-    // The pc offset where the original program should start
-    // Without this header it should start at 0, but we add 2 for each call and jump instruction (as both of them use immediate values)
-    // and also 1 for each instruction added to copy each return value into the output segment
-    let program_start_offset: i16 = 4 + return_type_size;
-
-    let mut ctx = casm! {};
-    casm_extend! {ctx,
-        call rel program_start_offset; // Begin program execution by calling the first instruction in the original program
-    };
-    // Append each return value to the output segment
-    for (i, j) in (1..return_type_size + 1).rev().enumerate() {
-        casm_extend! {ctx,
-            // [ap -j] is where each return value is located in memory
-            // [[fp + output_fp_offet] + 0] is the base of the output segment
-            [ap - j] = [[fp + output_fp_offset] + i as i16];
-        };
-    }
-    casm_extend! {ctx,
-        jmp rel 0; // Infinite loop
-    };
-    ctx.instructions
-}
-
-// Create specific instructions to append the return values to the output segment when not running in proof_mode
-// Call the firt program instruction, appends the return values to the output builtin's memory segment and then returns
-fn create_append_return_values_header(
-    builtin_count: i16,
-    return_type_size: i16,
-) -> Vec<Instruction> {
-    // As the output builtin is not used by cairo 1 (we forced it for this purpose), it's segment is always empty
-    // so we can start writing values directly from it's base, which is located relative to the fp before the other builtin's bases
-    let output_fp_offset: i16 = -(builtin_count + 2); // The 2 here represents the return_fp & end segments
-
-    // The pc offset where the original program should start
-    // Without this header it should start at 0, but we add 2 for the call and 1 for the return instruction
-    // and also 1 for each instruction added to copy each return value into the output segment
-    let program_start_offset: i16 = 3 + return_type_size;
-
-    let mut ctx = casm! {};
-    casm_extend! {ctx,
-        call rel program_start_offset; // Begin program execution by calling the first instruction in the original program
-    };
-    // Append each return value to the output segment
-    for (i, j) in (1..return_type_size + 1).rev().enumerate() {
-        casm_extend! {ctx,
-            // [ap -j] is where each return value is located in memory
-            // [[fp + output_fp_offet] + 0] is the base of the output segment
-            [ap - j] = [[fp + output_fp_offset] + i as i16];
-        };
-    }
-    casm_extend! {ctx,
-        ret;
-    };
-    ctx.instructions
-}
-
 /// Returns the instructions to add to the beginning of the code to successfully call the main
 /// function, as well as the builtins required to execute the program.
 fn create_entry_code(
@@ -411,18 +349,19 @@ fn create_entry_code(
     type_sizes: &UnorderedHashMap<ConcreteTypeId, i16>,
     func: &Function,
     initial_gas: usize,
-    append_output: bool,
-    args: &[FuncArg],
-) -> Result<(Vec<Instruction>, Vec<BuiltinName>), Error> {
-    let mut ctx = casm! {};
+    config: &Cairo1RunConfig,
+) -> Result<(CasmContext, Vec<BuiltinName>), Error> {
+    let copy_to_output_builtin = config.proof_mode || config.append_return_values;
+    let signature = &func.signature;
     // The builtins in the formatting expected by the runner.
-    let (builtins, builtin_offset) = get_function_builtins(func, append_output);
-
+    let (builtins, builtin_offset) =
+        get_function_builtins(&signature.param_types, copy_to_output_builtin);
+    let mut ctx = casm! {};
     // Load all vecs to memory.
     // Load all array args content to memory.
     let mut array_args_data = vec![];
     let mut ap_offset: i16 = 0;
-    for arg in args {
+    for arg in config.args {
         let FuncArg::Array(values) = arg else {
             continue;
         };
@@ -442,10 +381,10 @@ fn create_entry_code(
     }
     let mut array_args_data_iter = array_args_data.iter();
     let after_arrays_data_offset = ap_offset;
-    let mut arg_iter = args.iter().enumerate();
+    let mut arg_iter = config.args.iter().enumerate();
     let mut param_index = 0;
     let mut expected_arguments_size = 0;
-    if func.signature.param_types.iter().any(|ty| {
+    if signature.param_types.iter().any(|ty| {
         get_info(sierra_program_registry, ty)
             .map(|x| x.long_id.generic_id == SegmentArenaType::ID)
             .unwrap_or_default()
@@ -464,19 +403,13 @@ fn create_entry_code(
         }
         ap_offset += 3;
     }
-    for ty in func.signature.param_types.iter() {
+
+    for ty in &signature.param_types {
         let info = get_info(sierra_program_registry, ty)
             .ok_or_else(|| Error::NoInfoForType(ty.clone()))?;
         let generic_ty = &info.long_id.generic_id;
         if let Some(offset) = builtin_offset.get(generic_ty) {
-            let mut offset = *offset;
-            if append_output {
-                // Everything is off by 2 due to the proof mode header
-                offset += 2;
-            }
-            casm_extend! {ctx,
-                [ap + 0] = [fp - offset], ap++;
-            }
+            casm_extend!(ctx, [ap + 0] = [fp - *offset], ap++;);
             ap_offset += 1;
         } else if generic_ty == &SystemType::ID {
             casm_extend! {ctx,
@@ -485,15 +418,11 @@ fn create_entry_code(
             }
             ap_offset += 1;
         } else if generic_ty == &GasBuiltinType::ID {
-            casm_extend! {ctx,
-                [ap + 0] = initial_gas, ap++;
-            }
+            casm_extend!(ctx, [ap + 0] = initial_gas, ap++;);
             ap_offset += 1;
         } else if generic_ty == &SegmentArenaType::ID {
             let offset = -ap_offset + after_arrays_data_offset;
-            casm_extend! {ctx,
-                [ap + 0] = [ap + offset] + 3, ap++;
-            }
+            casm_extend!(ctx, [ap + 0] = [ap + offset] + 3, ap++;);
             ap_offset += 1;
         } else {
             let ty_size = type_sizes[ty];
@@ -529,7 +458,8 @@ fn create_entry_code(
             param_index += 1;
         };
     }
-    let actual_args_size = args
+    let actual_args_size = config
+        .args
         .iter()
         .map(|arg| match arg {
             FuncArg::Single(_) => 1,
@@ -544,17 +474,107 @@ fn create_entry_code(
     }
 
     let before_final_call = ctx.current_code_offset;
-    let final_call_size = 3;
+
+    let return_type_id = signature
+        .ret_types
+        .last()
+        .ok_or(Error::NoRetTypesInSignature)?;
+    let return_type_size = type_sizes
+        .get(return_type_id)
+        .cloned()
+        .ok_or_else(|| Error::NoTypeSizeForId(return_type_id.clone()))?;
+    let builtin_count: i16 = builtins.len().into_or_panic();
+    let builtin_locations: Vec<i16> = builtins
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let fp_loc = i.into_or_panic::<i16>() - builtin_count - 2;
+            let generic = match name {
+                BuiltinName::range_check => RangeCheckType::ID,
+                BuiltinName::pedersen => PedersenType::ID,
+                BuiltinName::bitwise => BitwiseType::ID,
+                BuiltinName::ec_op => EcOpType::ID,
+                BuiltinName::poseidon => PoseidonType::ID,
+                BuiltinName::segment_arena => SegmentArenaType::ID,
+                BuiltinName::keccak
+                | BuiltinName::ecdsa
+                | BuiltinName::output
+                | BuiltinName::range_check96
+                | BuiltinName::add_mod
+                | BuiltinName::mul_mod => return fp_loc,
+            };
+            signature
+                .ret_types
+                .iter()
+                .position(|ty| {
+                    sierra_program_registry
+                        .get_type(ty)
+                        .unwrap()
+                        .info()
+                        .long_id
+                        .generic_id
+                        == generic
+                })
+                .map(|i| (signature.ret_types.len() - i).into_or_panic())
+                .unwrap_or(fp_loc)
+        })
+        .collect();
+    if copy_to_output_builtin {
+        assert!(
+            builtins.iter().contains(&BuiltinName::output),
+            "Output builtin is required for proof mode or append_return_values"
+        );
+    }
+
+    let final_call_size =
+        // The call.
+        2
+        // The copying of the return values to the output segment. 
+        + if copy_to_output_builtin { return_type_size.into_or_panic::<usize>() + 1 } else { 0 }
+        // Rewriting the builtins to top of the stack.
+        + builtins.len()
+        // The return or infinite loop.
+        + if config.proof_mode { 2 } else { 1 };
     let offset = final_call_size
         + casm_program.debug_info.sierra_statement_info[func.entry_point.0].code_offset;
 
-    casm_extend! {ctx,
-        call rel offset;
-        ret;
+    casm_extend!(ctx, call rel offset;);
+
+    if copy_to_output_builtin {
+        let Some(output_builtin_idx) = builtins.iter().position(|b| b == &BuiltinName::output)
+        else {
+            panic!("Output builtin is required for proof mode or append_return_values.");
+        };
+        let output_fp_offset: i16 = builtin_locations[output_builtin_idx];
+        for (i, j) in (1..return_type_size + 1).rev().enumerate() {
+            casm_extend! {ctx,
+                // [ap -j] is where each return value is located in memory
+                // [[fp + output_fp_offet] + 0] is the base of the output segment
+                [ap - j] = [[fp + output_fp_offset] + i as i16];
+            };
+        }
     }
+    let mut ret_builtin_offset = return_type_size - 1;
+    for (builtin, location) in builtins.iter().zip(builtin_locations) {
+        if builtin == &BuiltinName::output && copy_to_output_builtin {
+            casm_extend!(ctx, [ap + 0] = [fp + location] + return_type_size, ap++;);
+        } else if location < 0 {
+            casm_extend!(ctx, [ap + 0] = [fp + location], ap++;);
+        } else {
+            casm_extend!(ctx, [ap + 0] = [ap - (ret_builtin_offset + location)], ap++;);
+        }
+        ret_builtin_offset += 1;
+    }
+
+    if config.proof_mode {
+        casm_extend!(ctx, jmp rel 0;);
+    } else {
+        casm_extend!(ctx, ret;);
+    }
+
     assert_eq!(before_final_call + final_call_size, ctx.current_code_offset);
 
-    Ok((ctx.instructions, builtins))
+    Ok((ctx, builtins))
 }
 
 fn get_info<'a>(
@@ -589,74 +609,35 @@ fn create_metadata(
     }
 }
 
-/// Type representing the Output builtin.
-#[derive(Default)]
-pub struct OutputType {}
-impl cairo_lang_sierra::extensions::NoGenericArgsGenericType for OutputType {
-    const ID: cairo_lang_sierra::ids::GenericTypeId =
-        cairo_lang_sierra::ids::GenericTypeId::new_inline("Output");
-    const STORABLE: bool = true;
-    const DUPLICATABLE: bool = false;
-    const DROPPABLE: bool = false;
-    const ZERO_SIZED: bool = false;
-}
-
 fn get_function_builtins(
-    func: &Function,
+    params: &[cairo_lang_sierra::ids::ConcreteTypeId],
     append_output: bool,
 ) -> (
     Vec<BuiltinName>,
     HashMap<cairo_lang_sierra::ids::GenericTypeId, i16>,
 ) {
-    let entry_params = &func.signature.param_types;
     let mut builtins = Vec::new();
     let mut builtin_offset: HashMap<cairo_lang_sierra::ids::GenericTypeId, i16> = HashMap::new();
     let mut current_offset = 3;
-    // Fetch builtins from the entry_params in the standard order
-    if entry_params
-        .iter()
-        .any(|ti| ti.debug_name == Some("Poseidon".into()))
-    {
-        builtins.push(BuiltinName::poseidon);
-        builtin_offset.insert(PoseidonType::ID, current_offset);
-        current_offset += 1;
-    }
-    if entry_params
-        .iter()
-        .any(|ti| ti.debug_name == Some("EcOp".into()))
-    {
-        builtins.push(BuiltinName::ec_op);
-        builtin_offset.insert(EcOpType::ID, current_offset);
-        current_offset += 1
-    }
-    if entry_params
-        .iter()
-        .any(|ti| ti.debug_name == Some("Bitwise".into()))
-    {
-        builtins.push(BuiltinName::bitwise);
-        builtin_offset.insert(BitwiseType::ID, current_offset);
-        current_offset += 1;
-    }
-    if entry_params
-        .iter()
-        .any(|ti| ti.debug_name == Some("RangeCheck".into()))
-    {
-        builtins.push(BuiltinName::range_check);
-        builtin_offset.insert(RangeCheckType::ID, current_offset);
-        current_offset += 1;
-    }
-    if entry_params
-        .iter()
-        .any(|ti| ti.debug_name == Some("Pedersen".into()))
-    {
-        builtins.push(BuiltinName::pedersen);
-        builtin_offset.insert(PedersenType::ID, current_offset);
-        current_offset += 1;
+    for (debug_name, builtin_name, sierra_id) in [
+        ("Poseidon", BuiltinName::poseidon, PoseidonType::ID),
+        ("EcOp", BuiltinName::ec_op, EcOpType::ID),
+        ("Bitwise", BuiltinName::bitwise, BitwiseType::ID),
+        ("RangeCheck", BuiltinName::range_check, RangeCheckType::ID),
+        ("Pedersen", BuiltinName::pedersen, PedersenType::ID),
+    ] {
+        if params
+            .iter()
+            .any(|id| id.debug_name.as_deref() == Some(debug_name))
+        {
+            builtins.push(builtin_name);
+            builtin_offset.insert(sierra_id, current_offset);
+            current_offset += 1;
+        }
     }
     // Force an output builtin so that we can write the program output into it's segment
     if append_output {
         builtins.push(BuiltinName::output);
-        builtin_offset.insert(OutputType::ID, current_offset);
     }
     builtins.reverse();
     (builtins, builtin_offset)
@@ -666,8 +647,21 @@ fn fetch_return_values(
     return_type_size: i16,
     return_type_id: &ConcreteTypeId,
     vm: &VirtualMachine,
+    builtin_count: i16,
+    fetch_from_output: bool,
 ) -> Result<Vec<MaybeRelocatable>, Error> {
-    let mut return_values = vm.get_return_values(return_type_size as usize)?;
+    let mut return_values = if fetch_from_output {
+        let output_builtin_end = vm
+            .get_relocatable((vm.get_ap() + (-builtin_count as i32)).unwrap())
+            .unwrap();
+        let output_builtin_base = (output_builtin_end + (-return_type_size as i32)).unwrap();
+        vm.get_continuous_range(output_builtin_base, return_type_size.into_or_panic())?
+    } else {
+        vm.get_continuous_range(
+            (vm.get_ap() - (return_type_size + builtin_count) as usize).unwrap(),
+            return_type_size as usize,
+        )?
+    };
     // Check if this result is a Panic result
     if return_type_id
         .debug_name
@@ -708,10 +702,10 @@ fn fetch_return_values(
 // Calculates builtins' final_stack setting each stop_ptr
 // Calling this function is a must if either air_public_input or cairo_pie are needed
 fn finalize_builtins(
-    skip_output: bool,
     main_ret_types: &[ConcreteTypeId],
     type_sizes: &UnorderedHashMap<ConcreteTypeId, i16>,
     vm: &mut VirtualMachine,
+    builtin_count: i16,
 ) -> Result<(), Error> {
     // Set stop pointers for builtins so we can obtain the air public input
     // Cairo 1 programs have other return values aside from the used builtin's final pointers, so we need to hand-pick them
@@ -721,8 +715,9 @@ fn finalize_builtins(
     let ret_types_and_sizes = main_ret_types.iter().zip(ret_types_sizes.clone());
 
     let full_ret_types_size: i16 = ret_types_sizes.sum();
-    let mut stack_pointer = (vm.get_ap() - (full_ret_types_size as usize).saturating_sub(1))
-        .map_err(VirtualMachineError::Math)?;
+    let mut stack_pointer = (vm.get_ap()
+        - (full_ret_types_size as usize + builtin_count as usize).saturating_sub(1))
+    .map_err(VirtualMachineError::Math)?;
 
     // Calculate the stack_ptr for each return builtin in the return values
     let mut builtin_name_to_stack_pointer = HashMap::new();
@@ -747,7 +742,7 @@ fn finalize_builtins(
     }
 
     // Set stop pointer for each builtin
-    vm.builtins_final_stack_from_stack_pointer_dict(&builtin_name_to_stack_pointer, skip_output)?;
+    vm.builtins_final_stack_from_stack_pointer_dict(&builtin_name_to_stack_pointer, false)?;
     Ok(())
 }
 
@@ -759,7 +754,7 @@ fn serialize_output(
     type_sizes: &UnorderedHashMap<ConcreteTypeId, i16>,
 ) -> String {
     let mut output_string = String::new();
-    let mut return_values_iter: Peekable<Iter<MaybeRelocatable>> = return_values.iter().peekable();
+    let mut return_values_iter = return_values.iter().peekable();
     serialize_output_inner(
         &mut return_values_iter,
         &mut output_string,
@@ -771,8 +766,8 @@ fn serialize_output(
     output_string
 }
 
-fn serialize_output_inner(
-    return_values_iter: &mut Peekable<Iter<MaybeRelocatable>>,
+fn serialize_output_inner<'a>(
+    return_values_iter: &mut Peekable<impl Iterator<Item = &'a MaybeRelocatable>>,
     output_string: &mut String,
     vm: &mut VirtualMachine,
     return_type_id: &ConcreteTypeId,
@@ -1037,7 +1032,7 @@ fn serialize_output_inner(
                 // Serialize the value
                 // We create a peekable array here in order to use the serialize_output_inner as the value could be a span
                 let value_vec = vec![value.clone()];
-                let mut value_iter: Peekable<Iter<MaybeRelocatable>> = value_vec.iter().peekable();
+                let mut value_iter = value_vec.iter().peekable();
                 serialize_output_inner(
                     &mut value_iter,
                     output_string,
@@ -1083,7 +1078,7 @@ fn serialize_output_inner(
                 // Serialize the value
                 // We create a peekable array here in order to use the serialize_output_inner as the value could be a span
                 let value_vec = vec![value.clone()];
-                let mut value_iter: Peekable<Iter<MaybeRelocatable>> = value_vec.iter().peekable();
+                let mut value_iter = value_vec.iter().peekable();
                 serialize_output_inner(
                     &mut value_iter,
                     output_string,
@@ -1175,7 +1170,7 @@ mod tests {
         // Set proof_mode
         let cairo_run_config = Cairo1RunConfig {
             proof_mode,
-            layout: "all_cairo",
+            layout: LayoutName::all_cairo,
             append_return_values: !proof_mode, // This is so we can test appending return values when not running in proof_mode
             finalize_builtins: true,
             ..Default::default()

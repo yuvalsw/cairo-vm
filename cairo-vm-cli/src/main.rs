@@ -6,6 +6,7 @@ use cairo_vm::cairo_run::{self, EncodeTraceError};
 use cairo_vm::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
 #[cfg(feature = "with_tracer")]
 use cairo_vm::serde::deserialize_program::DebugInfo;
+use cairo_vm::types::layout_name::LayoutName;
 use cairo_vm::vm::errors::cairo_run_errors::CairoRunError;
 use cairo_vm::vm::errors::trace_errors::TraceError;
 use cairo_vm::vm::errors::vm_errors::VirtualMachineError;
@@ -42,8 +43,8 @@ struct Args {
     entrypoint: String,
     #[structopt(long = "memory_file")]
     memory_file: Option<PathBuf>,
-    #[clap(long = "layout", default_value = "plain", value_parser=validate_layout)]
-    layout: String,
+    #[clap(long = "layout", default_value = "plain", value_enum)]
+    layout: LayoutName,
     #[structopt(long = "proof_mode")]
     proof_mode: bool,
     #[structopt(long = "secure_run")]
@@ -67,22 +68,6 @@ struct Args {
     #[structopt(long = "tracer")]
     #[cfg(feature = "with_tracer")]
     tracer: bool,
-}
-
-fn validate_layout(value: &str) -> Result<String, String> {
-    match value {
-        "plain"
-        | "small"
-        | "dex"
-        | "recursive"
-        | "starknet"
-        | "starknet_with_keccak"
-        | "recursive_large_output"
-        | "all_cairo"
-        | "all_solidity"
-        | "dynamic" => Ok(value.to_string()),
-        _ => Err(format!("{value} is not a valid layout")),
-    }
 }
 
 #[derive(Debug, Error)]
@@ -173,7 +158,7 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
         entrypoint: &args.entrypoint,
         trace_enabled,
         relocate_mem: args.memory_file.is_some() || args.air_public_input.is_some(),
-        layout: &args.layout,
+        layout: args.layout,
         proof_mode: args.proof_mode,
         secure_run: args.secure_run,
         allow_missing_builtins: args.allow_missing_builtins,
@@ -338,7 +323,6 @@ mod tests {
         #[values(false, true)] memory_file: bool,
         #[values(false, true)] mut trace_file: bool,
         #[values(false, true)] proof_mode: bool,
-        #[values(false, true)] secure_run: bool,
         #[values(false, true)] print_output: bool,
         #[values(false, true)] entrypoint: bool,
         #[values(false, true)] air_public_input: bool,
@@ -370,9 +354,6 @@ mod tests {
         }
         if trace_file {
             args.extend_from_slice(&["--trace_file".to_string(), "/dev/null".to_string()]);
-        }
-        if secure_run {
-            args.extend_from_slice(&["--secure_run".to_string(), "true".to_string()]);
         }
         if print_output {
             args.extend_from_slice(&["--print_output".to_string()]);
@@ -413,29 +394,5 @@ mod tests {
     #[test]
     fn test_main() {
         main().unwrap();
-    }
-
-    #[test]
-    fn test_valid_layouts() {
-        let valid_layouts = vec![
-            "plain",
-            "small",
-            "dex",
-            "starknet",
-            "starknet_with_keccak",
-            "recursive_large_output",
-            "all_cairo",
-            "all_solidity",
-        ];
-
-        for layout in valid_layouts {
-            assert_eq!(validate_layout(layout), Ok(layout.to_string()));
-        }
-    }
-
-    #[test]
-    fn test_invalid_layout() {
-        let invalid_layout = "invalid layout name";
-        assert!(validate_layout(invalid_layout).is_err());
     }
 }

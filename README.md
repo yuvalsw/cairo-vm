@@ -209,7 +209,7 @@ When running a Cairo program directly using the Cairo-vm repository you would fi
   ```rust
   let mut vm = VirtualMachine::new(false);
 
-  let mut cairo_runner = CairoRunner::new(&program, "all_cairo", false);
+  let mut cairo_runner = CairoRunner::new(&program, LayoutName::all_cairo, false);
 
   let mut hint_processor = BuiltinHintProcessor::new_empty();
 

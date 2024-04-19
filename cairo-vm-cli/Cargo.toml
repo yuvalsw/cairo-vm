@@ -8,7 +8,7 @@ readme.workspace = true
 keywords.workspace = true
 
 [dependencies]
-cairo-vm = { workspace = true, features = ["std"] }
+cairo-vm = { workspace = true, features = ["std", "clap"] }
 cairo-vm-tracer = { workspace = true, optional = true }
 clap = { version = "4.3.10", features = ["derive"] }
 mimalloc = { version = "0.1.37", default-features = false, optional = true }
@@ -22,5 +22,6 @@ rstest = "0.17.0"
 
 [features]
 default = ["with_mimalloc"]
-with_mimalloc = ["cairo-vm/with_mimalloc", "dep:mimalloc"]
-with_tracer = ["cairo-vm/with_tracer", "cairo-vm-tracer"]
+with_mimalloc = ["dep:mimalloc"]
+with_tracer = ["cairo-vm/tracer", "cairo-vm-tracer"]
+mod_builtin = ["cairo-vm/mod_builtin"]

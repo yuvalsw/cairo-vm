@@ -271,9 +271,8 @@ pub fn example_blake2s_compress(
     let blake2s_start = get_ptr_from_var_name("blake2s_start", vm, ids_data, ap_tracking)?;
     let output = get_ptr_from_var_name("output", vm, ids_data, ap_tracking)?;
     let n_bytes = get_integer_from_var_name("n_bytes", vm, ids_data, ap_tracking).map(|x| {
-        x.to_u32().ok_or_else(|| {
-            HintError::Math(MathError::Felt252ToU32Conversion(Box::new(x.into_owned())))
-        })
+        x.to_u32()
+            .ok_or_else(|| HintError::Math(MathError::Felt252ToU32Conversion(Box::new(x))))
     })??;
 
     let message = get_fixed_size_u32_array::<16>(&vm.get_integer_range(blake2s_start, 16)?)?;
@@ -302,7 +301,6 @@ mod tests {
             hint_processor_definition::HintProcessorLogic,
         },
         relocatable,
-        types::exec_scope::ExecutionScopes,
         utils::test_utils::*,
         vm::errors::memory_errors::MemoryError,
     };

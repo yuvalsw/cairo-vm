@@ -56,7 +56,7 @@ pub fn unsafe_keccak(
     if let Ok(keccak_max_size) = exec_scopes.get::<Felt252>("__keccak_max_size") {
         if length.as_ref() > &keccak_max_size {
             return Err(HintError::KeccakMaxSize(Box::new((
-                length.into_owned(),
+                length,
                 keccak_max_size,
             ))));
         }
@@ -71,7 +71,7 @@ pub fn unsafe_keccak(
     // transform to u64 to make ranges cleaner in the for loop below
     let u64_length = length
         .to_u64()
-        .ok_or_else(|| HintError::InvalidKeccakInputLength(Box::new(length.into_owned())))?;
+        .ok_or_else(|| HintError::InvalidKeccakInputLength(Box::new(length)))?;
 
     const ZEROES: [u8; 32] = [0u8; 32];
     let mut keccak_input = Vec::new();
@@ -243,9 +243,8 @@ pub fn split_n_bytes(
 ) -> Result<(), HintError> {
     let n_bytes =
         get_integer_from_var_name("n_bytes", vm, ids_data, ap_tracking).and_then(|x| {
-            x.to_u64().ok_or_else(|| {
-                HintError::Math(MathError::Felt252ToU64Conversion(Box::new(x.into_owned())))
-            })
+            x.to_u64()
+                .ok_or_else(|| HintError::Math(MathError::Felt252ToU64Conversion(Box::new(x))))
         })?;
     let bytes_in_word = constants
         .get(BYTES_IN_WORD)
@@ -298,7 +297,6 @@ mod tests {
             },
             hint_processor_definition::{HintProcessorLogic, HintReference},
         },
-        types::exec_scope::ExecutionScopes,
         utils::test_utils::*,
         vm::vm_core::VirtualMachine,
     };

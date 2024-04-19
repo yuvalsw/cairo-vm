@@ -340,7 +340,8 @@ impl Program {
                 HintReference {
                     offset1: r.value_address.offset1.clone(),
                     offset2: r.value_address.offset2.clone(),
-                    dereference: r.value_address.dereference,
+                    outer_dereference: r.value_address.outer_dereference,
+                    inner_dereference: r.value_address.inner_dereference,
                     // only store `ap` tracking data if the reference is referred to it
                     ap_tracking_data: match (&r.value_address.offset1, &r.value_address.offset2) {
                         (OffsetValue::Reference(Register::AP, _, _), _)

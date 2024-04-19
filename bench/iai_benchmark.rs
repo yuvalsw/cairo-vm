@@ -2,14 +2,12 @@ use core::hint::black_box;
 use iai_callgrind::main;
 
 use cairo_vm::{
-    types::program::Program,
+    types::{layout_name::LayoutName, program::Program},
     vm::{runners::cairo_runner::CairoRunner, vm_core::VirtualMachine},
 };
 
-#[cfg(feature = "with_mimalloc")]
 use mimalloc::MiMalloc;
 
-#[cfg(feature = "with_mimalloc")]
 #[global_allocator]
 static ALLOC: MiMalloc = MiMalloc;
 
@@ -33,7 +31,8 @@ fn parse_program_helper() -> Program {
 #[inline(never)]
 fn build_runner() {
     let program = parse_program_helper();
-    let runner = CairoRunner::new(black_box(&program), "starknet_with_keccak", false).unwrap();
+    let runner =
+        CairoRunner::new(black_box(&program), LayoutName::starknet_with_keccak, false).unwrap();
     core::mem::drop(black_box(runner));
 }
 
@@ -43,7 +42,7 @@ fn build_runner_helper() -> (CairoRunner, VirtualMachine) {
     //Picked the biggest one at the time of writing
     let program = include_bytes!("../cairo_programs/benchmarks/keccak_integration_benchmark.json");
     let program = Program::from_bytes(program.as_slice(), Some("main")).unwrap();
-    let runner = CairoRunner::new(&program, "starknet_with_keccak", false).unwrap();
+    let runner = CairoRunner::new(&program, LayoutName::starknet_with_keccak, false).unwrap();
     let vm = VirtualMachine::new(false);
     (runner, vm)
 }

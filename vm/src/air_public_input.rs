@@ -192,11 +192,13 @@ mod tests {
     #[case(include_bytes!("../../cairo_programs/proof_programs/pedersen_test.json"))]
     #[case(include_bytes!("../../cairo_programs/proof_programs/ec_op.json"))]
     fn serialize_and_deserialize_air_public_input(#[case] program_content: &[u8]) {
+        use crate::types::layout_name::LayoutName;
+
         let config = crate::cairo_run::CairoRunConfig {
             proof_mode: true,
             relocate_mem: true,
             trace_enabled: true,
-            layout: "all_cairo",
+            layout: LayoutName::all_cairo,
             ..Default::default()
         };
         let (runner, vm) = crate::cairo_run::cairo_run(program_content, &config, &mut crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor::new_empty()).unwrap();

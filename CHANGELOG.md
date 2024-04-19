@@ -2,6 +2,74 @@
 
 #### Upcoming Changes
 
+* refactor(BREAKING): Use an enum to represent layout name[#1715](https://github.com/lambdaclass/cairo-vm/pull/1715)
+  * Add enum `LayoutName` to represent cairo layout names.
+  * `CairoRunConfig`, `Cairo1RunConfig` & `CairoRunner` field `layout` type changed from `String` to `LayoutName`.
+  * `CairoLayout` field `name` type changed from `String` to `LayoutName`.
+
+* fix(BREAKING): Remove unsafe impl of `Add<usize> for &'a Relocatable`[#1718](https://github.com/lambdaclass/cairo-vm/pull/1718)
+
+* fix(BREAKING): Handle triple dereference references[#1708](https://github.com/lambdaclass/cairo-vm/pull/1708)
+  * Replace `ValueAddress` boolean field `dereference` with boolean fields `outer_dereference` & `inner_dereference`
+  * Replace `HintReference` boolean field `dereference` with boolean fields `outer_dereference` & `inner_dereference`
+  * Reference parsing now handles the case of dereferences inside the cast. Aka references of type `cast([A + B], type)` such as `cast([[fp + 2] + 2], felt)`.
+
+* Bump `starknet-types-core` version + Use the lib's pedersen hash [#1692](https://github.com/lambdaclass/cairo-vm/pull/1692)
+
+* refactor: Remove unused code & use constants whenever possible for builtin instance definitions[#1707](https://github.com/lambdaclass/cairo-vm/pull/1707)
+
+* feat: missing EC hints for Starknet OS 0.13.1 [#1706](https://github.com/lambdaclass/cairo-vm/pull/1706)
+
+* fix(BREAKING): Use program builtins in `initialize_main_entrypoint` & `read_return_values`[#1703](https://github.com/lambdaclass/cairo-vm/pull/1703)
+  * `initialize_main_entrypoint` now iterates over the program builtins when building the stack & inserts 0 for any missing builtin
+  * `read_return_values` now only computes the final stack of the builtins in the program
+  * BREAKING: `read_return_values` now takes a boolean argument `allow_missing_builtins`
+  * Added method `BuiltinRunner::identifier` to get the `BuiltinName` of each builtin
+  * BREAKING: `OutputBuiltinRunner::get_public_memory` now takes a reference to `MemorySegmentManager`
+  * BREAKING: method `VirtualMachine::get_memory_segment_addresses` moved to `CairoRunner::get_memory_segment_addresses`
+
+* feat(BREAKING): Add range_check96 builtin[#1698](https://github.com/lambdaclass/cairo-vm/pull/1698)
+  * Add the new `range_check96` builtin to the `all_cairo` layout.
+  * `RangeCheckBuiltinRunner` changes:
+    * Remove field `n_parts`, replacing it with const generic `N_PARTS`.
+    * Remome `n_parts` argument form method `new`.
+    * Remove field `_bound`, replacing it with public method `bound`.
+    * Add public methods `name` & `n_parts`.
+
+* feat(BREAKING): Add mod builtin [#1673](https://github.com/lambdaclass/cairo-vm/pull/1673)
+
+  Main Changes:
+  * Add the new `ModBuiltinRunner`, implementing the builtins `add_mod` & `mul_mod`
+  * Adds `add_mod` & `mul_mod` to the `all_cairo` & `dynamic` layouts under the `mod_builtin` feature flag. This will be added to the main code in a future update.
+  * Add method `VirtualMachine::fill_memory` in order to perform the new builtin's main logic from within hints
+  * Add hints to run arithmetic circuits using `add_mod` and/or `mul_mod` builtins
+
+  Other Changes:
+  * BREAKING: BuiltinRunner method signature change from
+  `air_private_input(&self, memory: &Memory) -> Vec<PrivateInput>` to `pub fn air_private_input(&self, segments: &MemorySegmentManager) -> Vec<PrivateInput>`
+  * Add `MayleRelocatable::sub_usize`
+  * Implement `Add<u32> for Relocatable`
+  * Add `Memory::get_usize`
+  * BREAKING: Clean up unused/duplicated code from builtins module:
+    * Remove unused method `get_memory_segment_addresses` from all builtin runners & the enum
+    * Remove empty implementations of `deduce_memory_cell` & `add_validation_rules` from all builtin runners
+    * Remove duplicated implementation of `final_stack` from all builtin runners except output and move it to the enum implementation
+
+* bugfix(BREAKING): Handle off2 immediate case in `get_integer_from_reference`[#1701](https://github.com/lambdaclass/cairo-vm/pull/1701)
+  * `get_integer_from_reference` & `get_integer_from_var_name` output changed from `Result<Cow<'a, Felt252>, HintError>` to `Result<Felt252, HintError>`
+
+* feat: Reorganized builtins to be in the top of stack at the end of a run (Cairo1).
+
+* BREAKING: Remove `CairoRunner::add_additional_hash_builtin` & `VirtualMachine::disable_trace`[#1658](https://github.com/lambdaclass/cairo-vm/pull/1658)
+
+* feat: output builtin add_attribute method [#1691](https://github.com/lambdaclass/cairo-vm/pull/1691)
+ 
+* feat: add a method to retrieve the output builtin from the VM [#1690](https://github.com/lambdaclass/cairo-vm/pull/1690)
+
+* feat: Add zero segment [#1668](https://github.com/lambdaclass/cairo-vm/pull/1668)
+
+* feat: Bump cairo_lang to 0.13.1 in testing env [#1687](https://github.com/lambdaclass/cairo-vm/pull/1687)
+
 * feat(BREAKING): Use return type info from sierra when serializing return values in cairo1-run crate [#1665](https://github.com/lambdaclass/cairo-vm/pull/1665)
   * Removed public function `serialize_output`.
   * Add field `serialize_output` to `Cairo1RunConfig`.
@@ -28,6 +96,8 @@
 * feat: Add flag to append return values to output segment when not running in proof_mode [#1646](https://github.com/lambdaclass/cairo-vm/pull/1646)
   * Adds the flag `append_return_values` to both the CLI and `Cairo1RunConfig` struct.
   * Enabling flag will add the output builtin and the necessary instructions to append the return values to the output builtin's memory segment.
+
+* feat: Compute program hash chain [#1647](https://github.com/lambdaclass/cairo-vm/pull/1647)
 
 * feat: Add cairo1-run output pretty-printing for felts, arrays/spans and dicts [#1630](https://github.com/lambdaclass/cairo-vm/pull/1630)
 

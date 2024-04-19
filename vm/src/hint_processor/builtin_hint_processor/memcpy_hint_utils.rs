@@ -36,8 +36,7 @@ pub fn memcpy_enter_scope(
     ids_data: &HashMap<String, HintReference>,
     ap_tracking: &ApTracking,
 ) -> Result<(), HintError> {
-    let len: Box<dyn Any> =
-        Box::new(get_integer_from_var_name("len", vm, ids_data, ap_tracking)?.into_owned());
+    let len: Box<dyn Any> = Box::new(get_integer_from_var_name("len", vm, ids_data, ap_tracking)?);
     exec_scopes.enter_scope(HashMap::from([(String::from("n"), len)]));
     Ok(())
 }

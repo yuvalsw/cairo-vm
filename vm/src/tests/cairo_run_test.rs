@@ -1,6 +1,15 @@
-use num_traits::Zero;
+use crate::{tests::*, types::layout_name::LayoutName};
+#[cfg(feature = "mod_builtin")]
+use crate::{
+    utils::test_utils::Program,
+    vm::{
+        runners::{builtin_runner::BuiltinRunner, cairo_runner::CairoRunner},
+        security::verify_secure_runner,
+        vm_core::VirtualMachine,
+    },
+};
 
-use crate::tests::*;
+use num_traits::Zero;
 
 #[test]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
@@ -1060,4 +1069,172 @@ fn cairo_run_print_dict_array() {
     let program_data =
         include_bytes!("../../../cairo_programs/print_feature/print_dict_array.json");
     run_program_simple(program_data);
+}
+
+#[test]
+fn run_program_allow_missing_builtins() {
+    let program_data = include_bytes!("../../../cairo_programs/pedersen_extra_builtins.json");
+    let config = CairoRunConfig {
+        allow_missing_builtins: Some(true),
+        layout: LayoutName::small, // The program logic only uses builtins in the small layout but contains builtins outside of it
+        ..Default::default()
+    };
+    assert!(crate::cairo_run::cairo_run(
+        program_data,
+        &config,
+        &mut BuiltinHintProcessor::new_empty()
+    )
+    .is_ok())
+}
+
+#[test]
+fn run_program_allow_missing_builtins_proof() {
+    let program_data =
+        include_bytes!("../../../cairo_programs/proof_programs/pedersen_extra_builtins.json");
+    let config = CairoRunConfig {
+        proof_mode: true,
+        allow_missing_builtins: Some(true),
+        layout: LayoutName::small, // The program logic only uses builtins in the small layout but contains builtins outside of it
+        ..Default::default()
+    };
+    assert!(crate::cairo_run::cairo_run(
+        program_data,
+        &config,
+        &mut BuiltinHintProcessor::new_empty()
+    )
+    .is_ok())
+}
+
+#[test]
+#[cfg(feature = "mod_builtin")]
+fn cairo_run_mod_builtin() {
+    let program_data =
+        include_bytes!("../../../cairo_programs/mod_builtin_feature/mod_builtin.json");
+    run_program_with_custom_mod_builtin_params(program_data, false, 1, 3, None);
+}
+
+#[test]
+#[cfg(feature = "mod_builtin")]
+fn cairo_run_mod_builtin_failure() {
+    let program_data =
+        include_bytes!("../../../cairo_programs/mod_builtin_feature/mod_builtin_failure.json");
+    let error_msg = "mul_mod_builtin: Expected a * b == c (mod p). Got: instance=2, batch=0, p=9, a=2, b=2, c=2.";
+    run_program_with_custom_mod_builtin_params(program_data, false, 1, 3, Some(error_msg));
+}
+
+#[test]
+#[cfg(feature = "mod_builtin")]
+fn cairo_run_mod_builtin_large_batch_size() {
+    let program_data = include_bytes!(
+        "../../../cairo_programs/mod_builtin_feature/mod_builtin_large_batch_size.json"
+    );
+    run_program_with_custom_mod_builtin_params(program_data, false, 8, 3, None);
+}
+
+#[test]
+#[cfg(feature = "mod_builtin")]
+fn cairo_run_mod_builtin_large_batch_size_failure() {
+    let program_data = include_bytes!(
+        "../../../cairo_programs/mod_builtin_feature/mod_builtin_large_batch_size_failure.json"
+    );
+    let error_msg = "mul_mod_builtin: Expected a * b == c (mod p). Got: instance=0, batch=2, p=9, a=2, b=2, c=2.";
+    run_program_with_custom_mod_builtin_params(program_data, false, 8, 3, Some(error_msg));
+}
+
+#[test]
+#[cfg(feature = "mod_builtin")]
+fn cairo_run_mod_builtin_proof() {
+    let program_data =
+        include_bytes!("../../../cairo_programs/mod_builtin_feature/proof/mod_builtin.json");
+    run_program_with_custom_mod_builtin_params(program_data, true, 1, 3, None);
+}
+
+#[test]
+#[cfg(feature = "mod_builtin")]
+fn cairo_run_mod_builtin_large_batch_size_proof() {
+    let program_data = include_bytes!(
+        "../../../cairo_programs/mod_builtin_feature/proof/mod_builtin_large_batch_size.json"
+    );
+    run_program_with_custom_mod_builtin_params(program_data, true, 8, 3, None);
+}
+
+#[cfg(feature = "mod_builtin")]
+fn run_program_with_custom_mod_builtin_params(
+    data: &[u8],
+    proof_mode: bool,
+    batch_size: usize,
+    word_bit_len: u32,
+    security_error: Option<&str>,
+) {
+    let cairo_run_config = CairoRunConfig {
+        layout: LayoutName::all_cairo,
+        proof_mode,
+        ..Default::default()
+    };
+    let mut hint_processor = BuiltinHintProcessor::new_empty();
+    let program = Program::from_bytes(data, Some(cairo_run_config.entrypoint)).unwrap();
+    let mut cairo_runner = CairoRunner::new(
+        &program,
+        cairo_run_config.layout,
+        cairo_run_config.proof_mode,
+    )
+    .unwrap();
+
+    let mut vm = VirtualMachine::new(cairo_run_config.trace_enabled);
+    let end = cairo_runner.initialize(&mut vm, false).unwrap();
+    // Modify add_mod & mul_mod params
+    for runner in vm.get_builtin_runners_as_mut() {
+        if let BuiltinRunner::Mod(runner) = runner {
+            runner.override_layout_params(batch_size, word_bit_len)
+        }
+    }
+
+    cairo_runner
+        .run_until_pc(end, &mut vm, &mut hint_processor)
+        .unwrap();
+
+    if cairo_run_config.proof_mode {
+        cairo_runner
+            .run_for_steps(1, &mut vm, &mut hint_processor)
+            .unwrap();
+    }
+    cairo_runner
+        .end_run(
+            cairo_run_config.disable_trace_padding,
+            false,
+            &mut vm,
+            &mut hint_processor,
+        )
+        .unwrap();
+
+    vm.verify_auto_deductions().unwrap();
+    cairo_runner.read_return_values(&mut vm, false).unwrap();
+    if cairo_run_config.proof_mode {
+        cairo_runner.finalize_segments(&mut vm).unwrap();
+    }
+    if !cairo_run_config.proof_mode {
+        let security_res = verify_secure_runner(&cairo_runner, true, None, &mut vm);
+        if let Some(error) = security_error {
+            assert!(security_res.is_err());
+            assert!(security_res.err().unwrap().to_string().contains(error));
+            return;
+        }
+        security_res.unwrap();
+    }
+}
+
+#[test]
+#[cfg(feature = "mod_builtin")]
+fn cairo_run_apply_poly() {
+    let program_data =
+        include_bytes!("../../../cairo_programs/mod_builtin_feature/apply_poly.json");
+    run_program(program_data, false, None, None, None);
+}
+
+#[test]
+#[cfg(feature = "mod_builtin")]
+fn cairo_run_apply_poly_proof() {
+    let program_data =
+        include_bytes!("../../../cairo_programs/mod_builtin_feature/proof/apply_poly.json");
+    run_program(program_data, true, None, None, None);
 }

@@ -168,7 +168,7 @@ fn add_consecutive_output_pages(
 
     for (i, page_size) in fact_topology.page_sizes.iter().copied().enumerate() {
         let page_id = current_page_id + i;
-        let page_start = output_start + offset;
+        let page_start = (*output_start + offset)?;
         output_builtin.add_page(page_id, page_start, page_size)?;
         offset += page_size;
     }

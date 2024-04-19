@@ -215,10 +215,10 @@ fn check_cairo_pie_builtin_usage(
     pre_execution_builtins_addr: &Relocatable,
 ) -> Result<(), HintError> {
     let return_builtin_value = memory
-        .get_integer(return_builtins_addr + builtin_index)?
+        .get_integer((*return_builtins_addr + builtin_index)?)?
         .into_owned();
     let pre_execution_builtin_value = memory
-        .get_integer(pre_execution_builtins_addr + builtin_index)?
+        .get_integer((*pre_execution_builtins_addr + builtin_index)?)?
         .into_owned();
     let expected_builtin_size = return_builtin_value - pre_execution_builtin_value;
 
@@ -255,9 +255,9 @@ fn write_return_builtins(
     for (index, builtin) in ALL_BUILTINS.iter().enumerate() {
         if used_builtins.contains(builtin) {
             let builtin_value = memory
-                .get_integer(used_builtins_addr + used_builtin_offset)?
+                .get_integer((*used_builtins_addr + used_builtin_offset)?)?
                 .into_owned();
-            memory.insert_value(return_builtins_addr + index, builtin_value)?;
+            memory.insert_value((*return_builtins_addr + index)?, builtin_value)?;
             used_builtin_offset += 1;
 
             if let Task::Pie(cairo_pie) = task {
@@ -274,9 +274,9 @@ fn write_return_builtins(
         // The builtin is unused, hence its value is the same as before calling the program.
         else {
             let pre_execution_value = memory
-                .get_integer(pre_execution_builtins_addr + index)?
+                .get_integer((*pre_execution_builtins_addr + index)?)?
                 .into_owned();
-            memory.insert_value(return_builtins_addr + index, pre_execution_value)?;
+            memory.insert_value((*return_builtins_addr + index)?, pre_execution_value)?;
         }
     }
     Ok(())

@@ -29,7 +29,7 @@ const HEX_SYMBOLS: [&str; 16] = [
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f",
 ];
 
-const HINTS_CODE: [&str; 184] = [
+const HINTS_CODE: [&str; 186] = [
     ADD_SEGMENT,
     VM_ENTER_SCOPE,
     VM_EXIT_SCOPE,
@@ -139,10 +139,12 @@ const HINTS_CODE: [&str; 184] = [
     EC_DOUBLE_SLOPE_V1,
     EC_DOUBLE_SLOPE_V2,
     EC_DOUBLE_SLOPE_V3,
+    EC_DOUBLE_SLOPE_V4,
     EC_DOUBLE_SLOPE_EXTERNAL_CONSTS,
     COMPUTE_SLOPE_V1,
     COMPUTE_SLOPE_V2,
-    COMPUTE_SLOPE_SECP256R1,
+    COMPUTE_SLOPE_SECP256R1_V1,
+    COMPUTE_SLOPE_SECP256R1_V2,
     IMPORT_SECP256R1_P,
     COMPUTE_SLOPE_WHITELIST,
     EC_DOUBLE_ASSIGN_NEW_X_V1,

@@ -1,0 +1,110 @@
+name: Benchmark Hyper Threading
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout PR
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.head_ref }}
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install Dependencies
+      run: |
+        pip install -r requirements.txt
+        sudo apt update
+        sudo apt-get install -y hyperfine
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@1.74.1
+      with:
+        components: rustfmt, clippy
+
+    - name: Compile PR Version
+      run: |
+        cargo build --release -p hyper_threading
+        cp target/release/hyper_threading ${{ github.workspace }}/hyper_threading_pr
+        cp ./examples/hyper_threading/hyper-threading-workflow.sh ${{ github.workspace }}/hyper-threading-workflow.sh
+    
+    - name: Upload PR Binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: hyper_threading_pr_binary
+        path: ${{ github.workspace }}/hyper_threading_pr
+
+    - name: Upload Workflow Script
+      uses: actions/upload-artifact@v4
+      with:
+        name: hyper_threading_workflow_script
+        path: ${{ github.workspace }}/hyper-threading-workflow.sh
+
+
+    - name: Checkout Main Branch
+      uses: actions/checkout@v2
+      with:
+        ref: 'main'
+
+    - name: Compile Main Version
+      run: |
+        cargo build --release -p hyper_threading
+        cp target/release/hyper_threading ${{ github.workspace }}/hyper_threading_main
+
+    - name: Download hyper_threading_pr_binary
+      uses: actions/download-artifact@v4
+      with:
+        name: hyper_threading_pr_binary
+        path: ${{ github.workspace }}/
+
+    - name: Download hyper_threading_workflow_script
+      uses: actions/download-artifact@v4
+      with:
+        name: hyper_threading_workflow_script
+        path: ${{ github.workspace }}/
+
+    - name: Compile programs 
+      run: make cairo_bench_programs
+
+    - name: Run Benchmarks
+      run: |
+        cd ${{ github.workspace }}
+        chmod +x ./hyper_threading_main
+        chmod +x ./hyper_threading_pr
+        chmod +x hyper-threading-workflow.sh
+        ./hyper-threading-workflow.sh
+
+    - name: Compare Results
+      run: |
+        cat result.md
+
+    - name: Find comment
+      uses: peter-evans/find-comment@v2
+      id: fc
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        comment-author: 'github-actions[bot]'
+        body-includes: "**Hyper Thereading Benchmark results**"
+
+    - name: Create comment
+      if: steps.fc.outputs.comment-id == ''
+      uses: peter-evans/create-or-update-comment@v3
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        body-path: result.md
+
+    - name: Update comment
+      if: steps.fc.outputs.comment-id != ''
+      uses: peter-evans/create-or-update-comment@v3
+      with:
+        comment-id: ${{ steps.fc.outputs.comment-id }}
+        body-path: result.md
+        edit-mode: replace

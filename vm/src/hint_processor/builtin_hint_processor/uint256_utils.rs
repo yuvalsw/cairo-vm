@@ -507,10 +507,7 @@ mod tests {
             },
             hint_processor_definition::HintProcessorLogic,
         },
-        types::{
-            exec_scope::ExecutionScopes,
-            relocatable::{MaybeRelocatable, Relocatable},
-        },
+        types::relocatable::{MaybeRelocatable, Relocatable},
         utils::test_utils::*,
         vm::{errors::memory_errors::MemoryError, vm_core::VirtualMachine},
     };

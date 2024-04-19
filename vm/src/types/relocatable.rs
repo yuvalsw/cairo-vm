@@ -127,6 +127,13 @@ impl AddAssign<usize> for Relocatable {
     }
 }
 
+impl Add<u32> for Relocatable {
+    type Output = Result<Relocatable, MathError>;
+    fn add(self, other: u32) -> Result<Self, MathError> {
+        self + other as usize
+    }
+}
+
 impl Add<i32> for Relocatable {
     type Output = Result<Relocatable, MathError>;
     fn add(self, other: i32) -> Result<Self, MathError> {
@@ -225,15 +232,8 @@ impl MaybeRelocatable {
     pub fn add_int(&self, other: &Felt252) -> Result<MaybeRelocatable, MathError> {
         match *self {
             MaybeRelocatable::Int(ref value) => Ok(MaybeRelocatable::Int(value + other)),
-            MaybeRelocatable::RelocatableValue(ref rel) => {
-                let big_offset = other + rel.offset as u64;
-                let new_offset = big_offset.to_usize().ok_or_else(|| {
-                    MathError::RelocatableAddFelt252OffsetExceeded(Box::new((*rel, *other)))
-                })?;
-                Ok(MaybeRelocatable::RelocatableValue(Relocatable {
-                    segment_index: rel.segment_index,
-                    offset: new_offset,
-                }))
+            MaybeRelocatable::RelocatableValue(rel) => {
+                Ok(MaybeRelocatable::RelocatableValue((rel + other)?))
             }
         }
     }
@@ -262,6 +262,14 @@ impl MaybeRelocatable {
                 Ok((rel + num_ref)?.into())
             }
         }
+    }
+
+    /// Subs a usize from self
+    pub fn sub_usize(&self, other: usize) -> Result<MaybeRelocatable, MathError> {
+        Ok(match *self {
+            MaybeRelocatable::Int(ref value) => MaybeRelocatable::Int(value - other as u64),
+            MaybeRelocatable::RelocatableValue(rel) => (rel - other)?.into(),
+        })
     }
 
     /// Substracts two MaybeRelocatable values and returns the result as a MaybeRelocatable value.
@@ -344,17 +352,6 @@ impl MaybeRelocatable {
         match self {
             MaybeRelocatable::RelocatableValue(rel) => Some(*rel),
             MaybeRelocatable::Int(_) => None,
-        }
-    }
-}
-
-impl<'a> Add<usize> for &'a Relocatable {
-    type Output = Relocatable;
-
-    fn add(self, other: usize) -> Self::Output {
-        Relocatable {
-            segment_index: self.segment_index,
-            offset: self.offset + other,
         }
     }
 }

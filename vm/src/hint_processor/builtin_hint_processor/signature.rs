@@ -20,10 +20,8 @@ pub fn verify_ecdsa_signature(
     ids_data: &HashMap<String, HintReference>,
     ap_tracking: &ApTracking,
 ) -> Result<(), HintError> {
-    let signature_r =
-        get_integer_from_var_name("signature_r", vm, ids_data, ap_tracking)?.into_owned();
-    let signature_s =
-        get_integer_from_var_name("signature_s", vm, ids_data, ap_tracking)?.into_owned();
+    let signature_r = get_integer_from_var_name("signature_r", vm, ids_data, ap_tracking)?;
+    let signature_s = get_integer_from_var_name("signature_s", vm, ids_data, ap_tracking)?;
     let ecdsa_ptr = get_ptr_from_var_name("ecdsa_ptr", vm, ids_data, ap_tracking)?;
     let ecdsa_builtin = &mut vm.get_signature_builtin()?;
     if ecdsa_ptr.segment_index != ecdsa_builtin.base() as isize {
@@ -54,9 +52,6 @@ mod tests {
             },
             hint_processor_definition::HintProcessorLogic,
         },
-        types::{
-            exec_scope::ExecutionScopes, instance_definitions::ecdsa_instance_def::EcdsaInstanceDef,
-        },
         utils::test_utils::*,
         vm::runners::builtin_runner::SignatureBuiltinRunner,
     };
@@ -69,8 +64,7 @@ mod tests {
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     fn verify_ecdsa_signature_valid() {
         let mut vm = vm!();
-        vm.builtin_runners =
-            vec![SignatureBuiltinRunner::new(&EcdsaInstanceDef::default(), true).into()];
+        vm.builtin_runners = vec![SignatureBuiltinRunner::new(Some(512), true).into()];
         vm.segments = segments![
             ((1, 0), (0, 0)),
             (
@@ -96,8 +90,7 @@ mod tests {
     #[test]
     fn verify_ecdsa_signature_invalid_ecdsa_ptr() {
         let mut vm = vm!();
-        vm.builtin_runners =
-            vec![SignatureBuiltinRunner::new(&EcdsaInstanceDef::default(), true).into()];
+        vm.builtin_runners = vec![SignatureBuiltinRunner::new(Some(512), true).into()];
         vm.segments = segments![
             ((1, 0), (3, 0)),
             (
@@ -123,8 +116,7 @@ mod tests {
     #[test]
     fn verify_ecdsa_signature_invalid_input_cell() {
         let mut vm = vm!();
-        vm.builtin_runners =
-            vec![SignatureBuiltinRunner::new(&EcdsaInstanceDef::default(), true).into()];
+        vm.builtin_runners = vec![SignatureBuiltinRunner::new(Some(512), true).into()];
         vm.segments = segments![
             ((1, 0), (0, 3)),
             (

@@ -194,6 +194,10 @@ jobs:
   smoke:
     needs: merge-caches
     name: Make sure all builds work
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: ["vm", "cairo-vm-cli", "cairo1-run"]
     runs-on: ubuntu-22.04
     steps:
     - name: Install Rust
@@ -210,6 +214,7 @@ jobs:
       uses: taiki-e/install-action@v2
       with:
         tool: cargo-all-features
+
     - name: Checkout
       uses: actions/checkout@v3
 
@@ -226,19 +231,86 @@ jobs:
         fail-on-cache-miss: true
 
     # NOTE: we do this separately because --workspace operates in weird ways
-    - name: Check all features (vm)
+    - name: Check all features (${{ matrix.crate }})
       run: |
-        cd vm
+        cd ${{ matrix.crate }}
         cargo check-all-features
+        cargo check-all-features --workspace --all-targets
 
-    - name: Check all features (CLI)
-      run: |
-        cd cairo-vm-cli
-        cargo check-all-features
-    
+  smoke-workspace:
+    needs: merge-caches
+    name: Make sure all builds work (workspace)
+    strategy:
+      fail-fast: false
+      matrix:
+        chunk: [1, 2, 3, 4, 5, 6]
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@1.74.1
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Set up cargo cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: true
+
+    - name: Install cargo-all-features
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-all-features
+
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Download proof programs symlinks
+      uses: actions/download-artifact@master
+      with:
+        name: proof_programs
+        path: cairo_programs/proof_programs/
+
+    - name: Fetch programs
+      uses: actions/cache/restore@v3
+      with:
+        path: ${{ env.CAIRO_PROGRAMS_PATH }}
+        key: all-programs-cache-${{ hashFiles('cairo_programs/**/*.cairo', 'examples/wasm-demo/src/array_sum.cairo') }}
+        fail-on-cache-miss: true
+
     - name: Check all features (workspace)
       run: |
-        cargo check-all-features --workspace --all-targets
+        cargo check-all-features --n-chunks 6 --chunk ${{ matrix.chunk }} --workspace --all-targets
+
+  smoke-no-std:
+    needs: merge-caches
+    name: Make sure all builds work (no_std)
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@1.74.1
+      with:
+        targets: wasm32-unknown-unknown
+
+    - name: Set up cargo cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: true
+
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Download proof programs symlinks
+      uses: actions/download-artifact@master
+      with:
+        name: proof_programs
+        path: cairo_programs/proof_programs/
+
+    - name: Fetch programs
+      uses: actions/cache/restore@v3
+      with:
+        path: ${{ env.CAIRO_PROGRAMS_PATH }}
+        key: all-programs-cache-${{ hashFiles('cairo_programs/**/*.cairo', 'examples/wasm-demo/src/array_sum.cairo') }}
+        fail-on-cache-miss: true
 
     - name: Check no-std
       run: |
@@ -251,7 +323,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        special_features: ["", "extensive_hints"]
+        special_features: ["", "extensive_hints", "mod_builtin"]
         target: [ test#1, test#2, test#3, test#4, test-no_std#1, test-no_std#2, test-no_std#3, test-no_std#4, test-wasm ]
     name: Run tests
     runs-on: ubuntu-22.04

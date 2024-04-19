@@ -1,5 +1,6 @@
 use crate::{
     hint_processor::hint_processor_definition::HintProcessor,
+    types::layout_name::LayoutName,
     types::program::Program,
     vm::{
         errors::{cairo_run_errors::CairoRunError, vm_exception::VmException},
@@ -15,7 +16,7 @@ use bincode::enc::write::Writer;
 use thiserror_no_std::Error;
 
 #[cfg(feature = "arbitrary")]
-use arbitrary::{self, Arbitrary, Unstructured};
+use arbitrary::{self, Arbitrary};
 
 #[cfg_attr(feature = "arbitrary", derive(Arbitrary))]
 pub struct CairoRunConfig<'a> {
@@ -23,28 +24,11 @@ pub struct CairoRunConfig<'a> {
     pub entrypoint: &'a str,
     pub trace_enabled: bool,
     pub relocate_mem: bool,
-    #[cfg_attr(feature = "arbitrary", arbitrary(with = arbitrary_layout))]
-    pub layout: &'a str,
+    pub layout: LayoutName,
     pub proof_mode: bool,
     pub secure_run: Option<bool>,
     pub disable_trace_padding: bool,
     pub allow_missing_builtins: Option<bool>,
-}
-
-#[cfg(feature = "arbitrary")]
-fn arbitrary_layout<'a>(u: &mut Unstructured) -> arbitrary::Result<&'a str> {
-    let layouts = [
-        "plain",
-        "small",
-        "dex",
-        "starknet",
-        "starknet_with_keccak",
-        "recursive_large_output",
-        "all_cairo",
-        "all_solidity",
-        "dynamic",
-    ];
-    Ok(u.choose(&layouts)?)
 }
 
 impl<'a> Default for CairoRunConfig<'a> {
@@ -53,7 +37,7 @@ impl<'a> Default for CairoRunConfig<'a> {
             entrypoint: "main",
             trace_enabled: false,
             relocate_mem: false,
-            layout: "plain",
+            layout: LayoutName::plain,
             proof_mode: false,
             secure_run: None,
             disable_trace_padding: false,
@@ -100,7 +84,7 @@ pub fn cairo_run_program(
     )?;
 
     vm.verify_auto_deductions()?;
-    cairo_runner.read_return_values(&mut vm)?;
+    cairo_runner.read_return_values(&mut vm, allow_missing_builtins)?;
     if cairo_run_config.proof_mode {
         cairo_runner.finalize_segments(&mut vm)?;
     }
@@ -135,6 +119,10 @@ pub fn cairo_run_fuzzed_program(
         .secure_run
         .unwrap_or(!cairo_run_config.proof_mode);
 
+    let allow_missing_builtins = cairo_run_config
+        .allow_missing_builtins
+        .unwrap_or(cairo_run_config.proof_mode);
+
     let mut cairo_runner = CairoRunner::new(
         &program,
         cairo_run_config.layout,
@@ -143,12 +131,7 @@ pub fn cairo_run_fuzzed_program(
 
     let mut vm = VirtualMachine::new(cairo_run_config.trace_enabled);
 
-    let _end = cairo_runner.initialize(
-        &mut vm,
-        cairo_run_config
-            .allow_missing_builtins
-            .unwrap_or(cairo_run_config.proof_mode),
-    )?;
+    let _end = cairo_runner.initialize(&mut vm, allow_missing_builtins)?;
 
     let res = match cairo_runner.run_until_steps(steps_limit, &mut vm, hint_executor) {
         Err(VirtualMachineError::EndOfProgram(_remaining)) => Ok(()), // program ran OK but ended before steps limit
@@ -160,7 +143,7 @@ pub fn cairo_run_fuzzed_program(
     cairo_runner.end_run(false, false, &mut vm, hint_executor)?;
 
     vm.verify_auto_deductions()?;
-    cairo_runner.read_return_values(&mut vm)?;
+    cairo_runner.read_return_values(&mut vm, allow_missing_builtins)?;
     if cairo_run_config.proof_mode {
         cairo_runner.finalize_segments(&mut vm)?;
     }

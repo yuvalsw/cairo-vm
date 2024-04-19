@@ -73,7 +73,6 @@ mod tests {
     use crate::hint_processor::builtin_hint_processor::hint_code;
     use crate::hint_processor::builtin_hint_processor::secp::bigint_utils::Uint768;
     use crate::hint_processor::hint_processor_definition::HintProcessorLogic;
-    use crate::types::exec_scope::ExecutionScopes;
     use crate::utils::test_utils::*;
 
     use assert_matches::assert_matches;

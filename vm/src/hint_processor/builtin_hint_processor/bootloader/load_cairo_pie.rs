@@ -105,7 +105,7 @@ impl RelocationTable {
             .get(&address.segment_index)
             .ok_or(MemoryError::Relocation)?;
 
-        Ok(new_base + address.offset)
+        Ok((*new_base + address.offset)?)
     }
 
     /// Relocates any value.
@@ -185,9 +185,9 @@ pub fn build_cairo_pie_relocation_table(
 
     // Set initial stack relocations.
     for (idx, _builtin_name) in cairo_pie.metadata.program.builtins.iter().enumerate() {
-        let memory_address = &origin_execution_segment + idx;
-        let segment_index = extract_segment(memory_map[&memory_address].clone())?;
-        let relocation = vm.get_relocatable(&execution_segment_address + idx)?;
+        let memory_address = origin_execution_segment + idx;
+        let segment_index = extract_segment(memory_map[&memory_address.unwrap()].clone())?;
+        let relocation = vm.get_relocatable((execution_segment_address + idx).unwrap())?;
         relocation_table.insert(segment_index, relocation)?;
     }
 

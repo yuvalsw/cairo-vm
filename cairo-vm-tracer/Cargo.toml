@@ -10,7 +10,6 @@ readme.workspace = true
 default = ["std"]
 std = []
 alloc = []
-tracer = []
 
 [dependencies]
 cairo-vm = { workspace = true, features = ["arbitrary", "std"] }

@@ -49,6 +49,10 @@ PROOF_BENCH_DIR=cairo_programs/benchmarks
 PROOF_BENCH_FILES:=$(wildcard $(PROOF_BENCH_DIR)/*.cairo)
 PROOF_COMPILED_BENCHES:=$(patsubst $(PROOF_BENCH_DIR)/%.cairo, $(PROOF_BENCH_DIR)/%.json, $(PROOF_BENCH_FILES))
 
+MOD_BUILTIN_TEST_PROOF_DIR=cairo_programs/mod_builtin_feature/proof
+MOD_BUILTIN_TEST_PROOF_FILES:=$(wildcard $(MOD_BUILTIN_TEST_PROOF_DIR)/*.cairo)
+COMPILED_MOD_BUILTIN_PROOF_TESTS:=$(patsubst $(MOD_BUILTIN_TEST_PROOF_DIR)/%.cairo, $(MOD_BUILTIN_TEST_PROOF_DIR)/%.json, $(MOD_BUILTIN_TEST_PROOF_FILES))
+
 $(TEST_PROOF_DIR)/%.json: $(TEST_PROOF_DIR)/%.cairo
 	cairo-compile --cairo_path="$(TEST_PROOF_DIR):$(PROOF_BENCH_DIR)" $< --output $@ --proof_mode
 
@@ -60,6 +64,9 @@ $(TEST_PROOF_DIR)/%.trace $(TEST_PROOF_DIR)/%.memory $(TEST_PROOF_DIR)/%.air_pub
 
 $(PROOF_BENCH_DIR)/%.json: $(PROOF_BENCH_DIR)/%.cairo
 	cairo-compile --cairo_path="$(TEST_PROOF_DIR):$(PROOF_BENCH_DIR)" $< --output $@ --proof_mode
+
+$(MOD_BUILTIN_TEST_PROOF_DIR)/%.json: $(MOD_BUILTIN_TEST_PROOF_DIR)/%.cairo
+	cairo-compile --cairo_path="$(MOD_BUILTIN_TEST_PROOF_DIR):$(MOD_BUILTIN_TEST_PROOF_DIR)" $< --output $@ --proof_mode
 
 # ======================
 # Run without proof mode
@@ -86,6 +93,10 @@ COMPILED_BAD_TESTS:=$(patsubst $(BAD_TEST_DIR)/%.cairo, $(BAD_TEST_DIR)/%.json, 
 PRINT_TEST_DIR=cairo_programs/print_feature
 PRINT_TEST_FILES:=$(wildcard $(PRINT_TEST_DIR)/*.cairo)
 COMPILED_PRINT_TESTS:=$(patsubst $(PRINT_TEST_DIR)/%.cairo, $(PRINT_TEST_DIR)/%.json, $(PRINT_TEST_FILES))
+
+MOD_BUILTIN_TEST_DIR=cairo_programs/mod_builtin_feature
+MOD_BUILTIN_TEST_FILES:=$(wildcard $(MOD_BUILTIN_TEST_DIR)/*.cairo)
+COMPILED_MOD_BUILTIN_TESTS:=$(patsubst $(MOD_BUILTIN_TEST_DIR)/%.cairo, $(MOD_BUILTIN_TEST_DIR)/%.json, $(MOD_BUILTIN_TEST_FILES))
 
 NORETROCOMPAT_DIR:=cairo_programs/noretrocompat
 NORETROCOMPAT_FILES:=$(wildcard $(NORETROCOMPAT_DIR)/*.cairo)
@@ -228,8 +239,8 @@ run:
 check:
 	cargo check
 
-cairo_test_programs: $(COMPILED_TESTS) $(COMPILED_BAD_TESTS) $(COMPILED_NORETROCOMPAT_TESTS) $(COMPILED_PRINT_TESTS)
-cairo_proof_programs: $(COMPILED_PROOF_TESTS)
+cairo_test_programs: $(COMPILED_TESTS) $(COMPILED_BAD_TESTS) $(COMPILED_NORETROCOMPAT_TESTS) $(COMPILED_PRINT_TESTS) $(COMPILED_MOD_BUILTIN_TESTS)
+cairo_proof_programs: $(COMPILED_PROOF_TESTS) $(COMPILED_MOD_BUILTIN_PROOF_TESTS)
 cairo_bench_programs: $(COMPILED_BENCHES)
 cairo_1_test_contracts: $(CAIRO_1_COMPILED_CASM_CONTRACTS)
 cairo_2_test_contracts: $(CAIRO_2_COMPILED_CASM_CONTRACTS)

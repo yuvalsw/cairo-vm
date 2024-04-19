@@ -1,11 +1,12 @@
 use crate::{
     stdlib::{
-        collections::HashMap,
+        collections::{BTreeMap, HashMap},
         prelude::{String, Vec},
     },
     vm::runners::builtin_runner::{
-        BITWISE_BUILTIN_NAME, EC_OP_BUILTIN_NAME, HASH_BUILTIN_NAME, KECCAK_BUILTIN_NAME,
-        POSEIDON_BUILTIN_NAME, RANGE_CHECK_BUILTIN_NAME, SIGNATURE_BUILTIN_NAME,
+        ADD_MOD_BUILTIN_NAME, BITWISE_BUILTIN_NAME, EC_OP_BUILTIN_NAME, HASH_BUILTIN_NAME,
+        KECCAK_BUILTIN_NAME, MUL_MOD_BUILTIN_NAME, POSEIDON_BUILTIN_NAME, RANGE_CHECK_BUILTIN_NAME,
+        SIGNATURE_BUILTIN_NAME,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -31,6 +32,10 @@ pub struct AirPrivateInputSerializable {
     keccak: Option<Vec<PrivateInput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     poseidon: Option<Vec<PrivateInput>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    add_mod: Option<PrivateInput>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mul_mod: Option<PrivateInput>,
 }
 
 // Contains only builtin public inputs, useful for library users
@@ -46,6 +51,7 @@ pub enum PrivateInput {
     PoseidonState(PrivateInputPoseidonState),
     KeccakState(PrivateInputKeccakState),
     Signature(PrivateInputSignature),
+    Mod(ModInput),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -106,6 +112,44 @@ pub struct SignatureInput {
     pub w: Felt252,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ModInput {
+    pub instances: Vec<ModInputInstance>,
+    pub zero_value_address: usize,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ModInputInstance {
+    pub index: usize,
+    pub p0: Felt252,
+    pub p1: Felt252,
+    pub p2: Felt252,
+    pub p3: Felt252,
+    pub values_ptr: usize,
+    pub offsets_ptr: usize,
+    pub n: usize,
+    pub batch: BTreeMap<usize, ModInputMemoryVars>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct ModInputMemoryVars {
+    pub a_offset: usize,
+    pub a0: Felt252,
+    pub a1: Felt252,
+    pub a2: Felt252,
+    pub a3: Felt252,
+    pub b_offset: usize,
+    pub b0: Felt252,
+    pub b1: Felt252,
+    pub b2: Felt252,
+    pub b3: Felt252,
+    pub c_offset: usize,
+    pub c0: Felt252,
+    pub c1: Felt252,
+    pub c2: Felt252,
+    pub c3: Felt252,
+}
+
 impl AirPrivateInput {
     pub fn to_serializable(
         &self,
@@ -122,6 +166,16 @@ impl AirPrivateInput {
             ec_op: self.0.get(EC_OP_BUILTIN_NAME).cloned(),
             keccak: self.0.get(KECCAK_BUILTIN_NAME).cloned(),
             poseidon: self.0.get(POSEIDON_BUILTIN_NAME).cloned(),
+            add_mod: self
+                .0
+                .get(ADD_MOD_BUILTIN_NAME)
+                .and_then(|pi| pi.first())
+                .cloned(),
+            mul_mod: self
+                .0
+                .get(MUL_MOD_BUILTIN_NAME)
+                .and_then(|pi| pi.first())
+                .cloned(),
         }
     }
 }
@@ -154,6 +208,7 @@ impl AirPrivateInputSerializable {
 
 #[cfg(test)]
 mod tests {
+    use crate::types::layout_name::LayoutName;
     #[cfg(feature = "std")]
     use {
         super::*,
@@ -224,6 +279,8 @@ mod tests {
                     input_s2: Felt252::from(3),
                 },
             )]),
+            add_mod: None,
+            mul_mod: None,
         };
 
         let private_input = AirPrivateInput::from(serializable_private_input.clone());
@@ -243,7 +300,7 @@ mod tests {
             proof_mode: true,
             relocate_mem: true,
             trace_enabled: true,
-            layout: "small",
+            layout: LayoutName::small,
             ..Default::default()
         };
         let (runner, vm) = crate::cairo_run::cairo_run(include_bytes!("../../cairo_programs/proof_programs/fibonacci.json"), &config, &mut crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor::new_empty()).unwrap();

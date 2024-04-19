@@ -81,7 +81,7 @@ pub fn divide_num_by_2(
     ids_data: &HashMap<String, HintReference>,
     ap_tracking: &ApTracking,
 ) -> Result<(), HintError> {
-    let felt = get_integer_from_var_name("num", vm, ids_data, ap_tracking)?.into_owned();
+    let felt = get_integer_from_var_name("num", vm, ids_data, ap_tracking)?;
     // Unwrapping is safe in this context, 2 != 0
     let two = NonZeroFelt::try_from(Felt252::from(2)).unwrap();
     let felt_divided_by_2 = felt.floor_div(&two);
@@ -114,8 +114,7 @@ pub fn set_current_task(
 ) -> Result<(), HintError> {
     let simple_bootloader_input: &SimpleBootloaderInput =
         exec_scopes.get_ref(vars::SIMPLE_BOOTLOADER_INPUT)?;
-    let n_tasks_felt =
-        get_integer_from_var_name("n_tasks", vm, ids_data, ap_tracking)?.into_owned();
+    let n_tasks_felt = get_integer_from_var_name("n_tasks", vm, ids_data, ap_tracking)?;
     let n_tasks = n_tasks_felt
         .to_usize()
         .ok_or(MathError::Felt252ToUsizeConversion(Box::new(n_tasks_felt)))?;

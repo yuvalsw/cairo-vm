@@ -1,5 +1,6 @@
 use crate::hint_processor::builtin_hint_processor::bootloader::types::BootloaderVersion;
 use crate::serde::deserialize_program::BuiltinName;
+use crate::types::errors::math_errors::MathError;
 use crate::types::relocatable::Relocatable;
 use crate::vm::errors::hint_errors::HintError;
 use crate::vm::errors::memory_errors::MemoryError;
@@ -11,12 +12,15 @@ use crate::Felt252;
 pub enum ProgramLoaderError {
     #[error(transparent)]
     Memory(#[from] MemoryError),
+    #[error(transparent)]
+    Math(#[from] MathError),
 }
 
 impl Into<HintError> for ProgramLoaderError {
     fn into(self) -> HintError {
         match self {
             ProgramLoaderError::Memory(e) => HintError::Memory(e),
+            ProgramLoaderError::Math(e) => HintError::Math(e),
         }
     }
 }
@@ -75,7 +79,7 @@ impl<'vm> ProgramLoader<'vm> {
         for (index, builtin) in builtins.iter().enumerate() {
             let builtin_felt = builtin_to_felt(&builtin)?;
             self.memory
-                .insert_value(builtin_list_ptr + index, builtin_felt)?;
+                .insert_value((*builtin_list_ptr + index).unwrap(), builtin_felt)?;
         }
 
         Ok(())
@@ -89,10 +93,10 @@ impl<'vm> ProgramLoader<'vm> {
     ) -> Result<usize, ProgramLoaderError> {
         // Map the header struct as memory addresses
         let data_length_ptr = base_address.clone();
-        let bootloader_version_ptr = base_address + 1;
-        let program_main_ptr = base_address + 2;
-        let n_builtins_ptr = base_address + 3;
-        let builtin_list_ptr = base_address + 4;
+        let bootloader_version_ptr = (*base_address + 1)?;
+        let program_main_ptr = (*base_address + 2)?;
+        let n_builtins_ptr = (*base_address + 3)?;
+        let builtin_list_ptr = (*base_address + 4)?;
 
         let program_data = &program.data;
 
@@ -128,7 +132,8 @@ impl<'vm> ProgramLoader<'vm> {
         program: &StrippedProgram,
     ) -> Result<(), ProgramLoaderError> {
         for (index, opcode) in program.data.iter().enumerate() {
-            self.memory.insert_value(base_address + index, opcode)?;
+            self.memory
+                .insert_value((*base_address + index).unwrap(), opcode)?;
         }
 
         Ok(())
@@ -161,7 +166,7 @@ impl<'vm> ProgramLoader<'vm> {
     ) -> Result<LoadedProgram, ProgramLoaderError> {
         let header_size = self.load_header(base_address, program, bootloader_version)?;
 
-        let program_address = base_address + header_size;
+        let program_address = (*base_address + header_size)?;
         self.load_code(&program_address, program)?;
 
         Ok(LoadedProgram {

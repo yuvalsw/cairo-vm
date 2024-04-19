@@ -196,6 +196,20 @@ pub fn div_mod(n: &BigInt, m: &BigInt, p: &BigInt) -> Result<BigInt, MathError> 
     Ok((n * a).mod_floor(p))
 }
 
+pub(crate) fn div_mod_unsigned(
+    n: &BigUint,
+    m: &BigUint,
+    p: &BigUint,
+) -> Result<BigUint, MathError> {
+    // BigUint to BigInt conversion cannot fail & div_mod will always return a positive value if all values are positive so we can safely unwrap here
+    div_mod(
+        &n.to_bigint().unwrap(),
+        &m.to_bigint().unwrap(),
+        &p.to_bigint().unwrap(),
+    )
+    .map(|i| i.to_biguint().unwrap())
+}
+
 pub fn ec_add(
     point_a: (BigInt, BigInt),
     point_b: (BigInt, BigInt),
