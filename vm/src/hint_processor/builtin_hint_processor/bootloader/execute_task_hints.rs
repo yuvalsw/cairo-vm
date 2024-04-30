@@ -19,7 +19,8 @@ use crate::hint_processor::builtin_hint_processor::hint_utils::{
     get_ptr_from_var_name, get_relocatable_from_var_name, insert_value_from_var_name,
 };
 use crate::hint_processor::hint_processor_definition::HintReference;
-use crate::serde::deserialize_program::{ApTracking, BuiltinName};
+use crate::serde::deserialize_program::ApTracking;
+use crate::types::builtin_name::BuiltinName;
 use crate::types::errors::math_errors::MathError;
 use crate::types::exec_scope::ExecutionScopes;
 use crate::types::relocatable::Relocatable;
@@ -222,11 +223,7 @@ fn check_cairo_pie_builtin_usage(
         .into_owned();
     let expected_builtin_size = return_builtin_value - pre_execution_builtin_value;
 
-    let builtin_name = builtin
-        .name()
-        .strip_suffix("_builtin")
-        .unwrap_or(builtin.name());
-    let builtin_size = Felt252::from(cairo_pie.metadata.builtin_segments[builtin_name].size);
+    let builtin_size = Felt252::from(cairo_pie.metadata.builtin_segments[builtin].size);
 
     if builtin_size != expected_builtin_size {
         return Err(HintError::AssertionFailed(

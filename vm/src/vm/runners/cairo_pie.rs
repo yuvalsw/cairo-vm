@@ -8,8 +8,8 @@ use zip::read::ZipFile;
 use super::cairo_runner::ExecutionResources;
 use crate::serde::deserialize_utils::deserialize_biguint_from_number;
 use crate::stdlib::prelude::{String, Vec};
-use crate::types::errors::cairo_pie_error::{CairoPieError, DeserializeMemoryError};
 use crate::types::builtin_name::BuiltinName;
+use crate::types::errors::cairo_pie_error::{CairoPieError, DeserializeMemoryError};
 use crate::vm::errors::cairo_pie_errors::CairoPieValidationError;
 use crate::{
     stdlib::{collections::HashMap, prelude::*},
@@ -87,7 +87,7 @@ pub struct CairoPieAdditionalData(
     pub  HashMap<BuiltinName, BuiltinAdditionalData>,
 );
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CairoPie {
     pub metadata: CairoPieMetadata,
     pub memory: CairoPieMemory,
@@ -181,8 +181,9 @@ impl CairoPie {
         let metadata: CairoPieMetadata = parse_zip_file(zip.by_name("metadata.json")?)?;
         let execution_resources: ExecutionResources =
             parse_zip_file(zip.by_name("execution_resources.json")?)?;
-        let additional_data: HashMap<String, BuiltinAdditionalData> =
-            parse_zip_file(zip.by_name("additional_data.json")?)?;
+        let additional_data = CairoPieAdditionalData {
+            0: parse_zip_file(zip.by_name("additional_data.json")?)?,
+        };
         let version: CairoPieVersion = parse_zip_file(zip.by_name("version.json")?)?;
 
         let addr_size: usize = 8;
@@ -396,7 +397,6 @@ impl CairoPie {
 
     #[cfg(feature = "std")]
     pub fn read_zip_file(file_path: &Path) -> Result<CairoPie, std::io::Error> {
-        use std::io::Read;
         use zip::ZipArchive;
 
         let file = File::open(file_path)?;
@@ -435,7 +435,6 @@ pub(super) mod serde_impl {
     use num_integer::Integer;
     use num_traits::Num;
 
-    use super::CAIRO_PIE_VERSION;
     use super::{CairoPieMemory, SegmentInfo};
     #[cfg(any(target_arch = "wasm32", no_std, not(feature = "std")))]
     use crate::alloc::string::ToString;
@@ -460,17 +459,9 @@ pub(super) mod serde_impl {
     // 2 ** (8 * ADDR_BYTE_LEN - 1)
     pub const OFFSET_BASE: u64 = 0x800000000000;
     // 2 ** OFFSET_BIT_LEN
-    use serde::{
-        de::Error, ser::SerializeMap, ser::SerializeSeq, Deserialize, Deserializer, Serialize,
-        Serializer,
-    };
-    use serde_json::Number;
+    use serde::{de::Error, ser::SerializeMap, Deserialize};
 
-    pub const ADDR_BYTE_LEN: usize = 8;
-    pub const FIELD_BYTE_LEN: usize = 32;
     pub const CELL_BYTE_LEN: usize = ADDR_BYTE_LEN + FIELD_BYTE_LEN;
-    pub const ADDR_BASE: u64 = 0x8000000000000000; // 2 ** (8 * ADDR_BYTE_LEN - 1)
-    pub const OFFSET_BASE: u64 = 0x800000000000; // 2 ** OFFSET_BIT_LEN
     pub const RELOCATE_BASE: &str =
         "8000000000000000000000000000000000000000000000000000000000000000"; // 2 ** (8 * FIELD_BYTE_LEN - 1)
 
@@ -486,66 +477,9 @@ pub(super) mod serde_impl {
         }
     }
 
-    pub mod version {
-        use super::*;
+    pub mod version {}
 
-        pub fn serialize<S>(_value: &(), serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            serializer.serialize_str(CAIRO_PIE_VERSION)
-        }
-
-        pub fn deserialize<'de, D>(d: D) -> Result<(), D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            let version = String::deserialize(d)?;
-
-            if version != CAIRO_PIE_VERSION {
-                Err(D::Error::custom("Invalid cairo_pie version"))
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    pub mod program_data {
-        use super::*;
-
-        pub fn serialize<S>(values: &[MaybeRelocatable], serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            use serde::ser::Error;
-            let mut seq_serializer = serializer.serialize_seq(Some(values.len()))?;
-
-            for value in values {
-                match value {
-                    MaybeRelocatable::RelocatableValue(_) => {
-                        return Err(S::Error::custom("Invalid program data"))
-                    }
-                    MaybeRelocatable::Int(x) => {
-                        seq_serializer.serialize_element(&Felt252Wrapper(x))?;
-                    }
-                };
-            }
-
-            seq_serializer.end()
-        }
-
-        pub fn deserialize<'de, D>(d: D) -> Result<Vec<MaybeRelocatable>, D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            let numbers = Vec::<serde_json::Number>::deserialize(d)?;
-            numbers
-                .into_iter()
-                .map(|n| Felt252::from_dec_str(n.as_str()).map(MaybeRelocatable::from))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|_| D::Error::custom("Failed to deserilaize Felt252 value"))
-        }
-    }
+    pub mod program_data {}
 
     pub mod prime {
         use super::*;
@@ -555,27 +489,27 @@ pub(super) mod serde_impl {
             static ref CAIRO_PRIME_NUMBER: Number =
                 Number::from_string_unchecked(CAIRO_PRIME.to_string());
         }
+    }
 
-        pub fn serialize<S>(_value: &(), serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            // Note: This uses an API intended only for testing.
-            CAIRO_PRIME_NUMBER.serialize(serializer)
+    pub fn serialize_program_data<S>(
+        values: &[MaybeRelocatable],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq_serializer = serializer.serialize_seq(Some(values.len()))?;
+
+        for value in values {
+            match value {
+                MaybeRelocatable::RelocatableValue(_) => todo!(),
+                MaybeRelocatable::Int(x) => {
+                    seq_serializer.serialize_element(&Felt252Wrapper(x))?;
+                }
+            };
         }
 
-        pub fn deserialize<'de, D>(d: D) -> Result<(), D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            let prime = Number::deserialize(d)?;
-
-            if prime != *CAIRO_PRIME_NUMBER {
-                Err(D::Error::custom("Invalid prime"))
-            } else {
-                Ok(())
-            }
-        }
+        seq_serializer.end()
     }
 
     pub fn serialize_memory<S>(
@@ -668,6 +602,42 @@ pub(super) mod serde_impl {
             res
         }
 
+        pub fn from_bytes(bytes: &[u8]) -> Option<CairoPieMemory> {
+            if !bytes.len().is_multiple_of(&CELL_BYTE_LEN) {
+                return None;
+            }
+
+            let relocatable_from_bytes = |bytes: [u8; 8]| -> (usize, usize) {
+                const N_SEGMENT_BITS: usize = 16;
+                const N_OFFSET_BITS: usize = 47;
+                const SEGMENT_MASK: u64 = ((1 << N_SEGMENT_BITS) - 1) << N_OFFSET_BITS;
+                const OFFSET_MASK: u64 = (1 << N_OFFSET_BITS) - 1;
+
+                let addr = u64::from_le_bytes(bytes);
+                let segment = (addr & SEGMENT_MASK) >> N_OFFSET_BITS;
+                let offset = addr & OFFSET_MASK;
+                (segment as usize, offset as usize)
+            };
+
+            let mut res = vec![];
+            for cell_bytes in bytes.chunks(CELL_BYTE_LEN) {
+                let addr = relocatable_from_bytes(cell_bytes[0..ADDR_BYTE_LEN].try_into().ok()?);
+                let field_bytes = &cell_bytes[ADDR_BYTE_LEN..CELL_BYTE_LEN];
+                // Check the last bit to determine if it is a Relocatable or Felt value
+                let value = if (field_bytes[field_bytes.len() - 1] & 0x80) != 0 {
+                    let (segment, offset) =
+                        relocatable_from_bytes(field_bytes[0..ADDR_BYTE_LEN].try_into().ok()?);
+                    MaybeRelocatable::from((segment as isize, offset))
+                } else {
+                    MaybeRelocatable::from(Felt252::from_bytes_le_slice(field_bytes))
+                };
+                res.push((addr, value));
+            }
+
+            Some(CairoPieMemory(res))
+        }
+    }
+
     pub fn serialize_prime<S>(_value: &BigUint, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -708,41 +678,6 @@ pub(super) mod serde_impl {
         d: D,
     ) -> Result<Vec<MaybeRelocatable>, D::Error> {
         d.deserialize_seq(MaybeRelocatableNumberVisitor)
-    }
-        pub fn from_bytes(bytes: &[u8]) -> Option<CairoPieMemory> {
-            if !bytes.len().is_multiple_of(&CELL_BYTE_LEN) {
-                return None;
-            }
-
-            let relocatable_from_bytes = |bytes: [u8; 8]| -> (usize, usize) {
-                const N_SEGMENT_BITS: usize = 16;
-                const N_OFFSET_BITS: usize = 47;
-                const SEGMENT_MASK: u64 = ((1 << N_SEGMENT_BITS) - 1) << N_OFFSET_BITS;
-                const OFFSET_MASK: u64 = (1 << N_OFFSET_BITS) - 1;
-
-                let addr = u64::from_le_bytes(bytes);
-                let segment = (addr & SEGMENT_MASK) >> N_OFFSET_BITS;
-                let offset = addr & OFFSET_MASK;
-                (segment as usize, offset as usize)
-            };
-
-            let mut res = vec![];
-            for cell_bytes in bytes.chunks(CELL_BYTE_LEN) {
-                let addr = relocatable_from_bytes(cell_bytes[0..ADDR_BYTE_LEN].try_into().ok()?);
-                let field_bytes = &cell_bytes[ADDR_BYTE_LEN..CELL_BYTE_LEN];
-                // Check the last bit to determine if it is a Relocatable or Felt value
-                let value = if (field_bytes[field_bytes.len() - 1] & 0x80) != 0 {
-                    let (segment, offset) =
-                        relocatable_from_bytes(field_bytes[0..ADDR_BYTE_LEN].try_into().ok()?);
-                    MaybeRelocatable::from((segment as isize, offset))
-                } else {
-                    MaybeRelocatable::from(Felt252::from_bytes_le_slice(field_bytes))
-                };
-                res.push((addr, value));
-            }
-
-            Some(CairoPieMemory(res))
-        }
     }
 
     pub mod signature_additional_data {

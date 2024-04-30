@@ -1,3 +1,4 @@
+use crate::types::builtin_name::BuiltinName;
 use crate::types::relocatable::{MaybeRelocatable, Relocatable};
 use crate::vm::errors::hint_errors::HintError;
 use crate::vm::errors::memory_errors::MemoryError;
@@ -226,7 +227,7 @@ fn relocate_builtin_additional_data(
     vm: &mut VirtualMachine,
     relocation_table: &RelocationTable,
 ) -> Result<(), SignatureRelocationError> {
-    let ecdsa_additional_data = match cairo_pie.additional_data.get("ecdsa_builtin") {
+    let ecdsa_additional_data = match cairo_pie.additional_data.0.get(&BuiltinName::ecdsa) {
         Some(additional_data) => match additional_data {
             BuiltinAdditionalData::Signature(data) => data,
             _ => return Err(SignatureRelocationError::UnexpectedBuiltinDataType),

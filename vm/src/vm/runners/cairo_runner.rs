@@ -15,7 +15,6 @@ use crate::{
     Felt252,
 };
 
-use crate::vm::runners::cairo_pie::CAIRO_PIE_VERSION;
 use crate::{
     hint_processor::hint_processor_definition::{HintProcessor, HintReference},
     math_utils::safe_div_usize,

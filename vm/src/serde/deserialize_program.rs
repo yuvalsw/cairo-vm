@@ -14,7 +14,6 @@ use crate::{
         sync::Arc,
     },
     types::builtin_name::BuiltinName,
-    utils::CAIRO_PRIME,
 };
 
 use crate::utils::PRIME_STR;

@@ -1,5 +1,5 @@
 use crate::hint_processor::builtin_hint_processor::bootloader::types::BootloaderVersion;
-use crate::serde::deserialize_program::BuiltinName;
+use crate::types::builtin_name::BuiltinName;
 use crate::types::errors::math_errors::MathError;
 use crate::types::relocatable::Relocatable;
 use crate::vm::errors::hint_errors::HintError;
@@ -35,9 +35,9 @@ impl Into<HintError> for ProgramLoaderError {
 fn builtin_to_felt(builtin: &BuiltinName) -> Result<Felt252, ProgramLoaderError> {
     // The Python implementation uses the builtin name without suffix
     let builtin_name = builtin
-        .name()
+        .to_str()
         .strip_suffix("_builtin")
-        .unwrap_or(builtin.name());
+        .unwrap_or(builtin.to_str());
 
     // let buf = {
     //     let mut padding: Vec<u8> = vec![0; 32 - builtin_name.len()];

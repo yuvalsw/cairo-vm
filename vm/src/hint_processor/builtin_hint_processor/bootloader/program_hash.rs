@@ -2,7 +2,7 @@ use starknet_crypto::{pedersen_hash, FieldElement};
 
 use crate::Felt252;
 
-use crate::serde::deserialize_program::BuiltinName;
+use crate::types::builtin_name::BuiltinName;
 use crate::types::relocatable::MaybeRelocatable;
 use crate::vm::runners::cairo_pie::StrippedProgram;
 
@@ -62,12 +62,12 @@ where
 fn builtin_to_field_element(builtin: &BuiltinName) -> Result<FieldElement, ProgramHashError> {
     // The Python implementation uses the builtin name without suffix
     let builtin_name = builtin
-        .name()
+        .to_str()
         .strip_suffix("_builtin")
-        .unwrap_or(builtin.name());
+        .unwrap_or(builtin.to_str());
 
     FieldElement::from_byte_slice_be(builtin_name.as_bytes())
-        .map_err(|_| ProgramHashError::InvalidProgramBuiltin(builtin.name()))
+        .map_err(|_| ProgramHashError::InvalidProgramBuiltin(builtin.to_str()))
 }
 
 /// The `value: FieldElement` is `pub(crate)` and there is no accessor.
