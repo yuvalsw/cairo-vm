@@ -55,7 +55,6 @@ pub fn memset_step_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stdlib::string::ToString;
     use crate::types::relocatable::Relocatable;
     use crate::{
         any_box,
@@ -100,7 +99,7 @@ mod tests {
         let ids_data = ids_data!["n"];
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("n".to_string(), (1,1).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "n"
         );
     }
 

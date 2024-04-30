@@ -700,7 +700,7 @@ mod tests {
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code, &mut exec_scopes),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("n_used_accesses".to_string(), (1,0).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "n_used_accesses"
         );
     }
 

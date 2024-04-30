@@ -3,11 +3,7 @@ use crate::{
         collections::{BTreeMap, HashMap},
         prelude::{String, Vec},
     },
-    vm::runners::builtin_runner::{
-        ADD_MOD_BUILTIN_NAME, BITWISE_BUILTIN_NAME, EC_OP_BUILTIN_NAME, HASH_BUILTIN_NAME,
-        KECCAK_BUILTIN_NAME, MUL_MOD_BUILTIN_NAME, POSEIDON_BUILTIN_NAME, RANGE_CHECK_BUILTIN_NAME,
-        SIGNATURE_BUILTIN_NAME,
-    },
+    types::builtin_name::BuiltinName,
 };
 use serde::{Deserialize, Serialize};
 
@@ -40,7 +36,7 @@ pub struct AirPrivateInputSerializable {
 
 // Contains only builtin public inputs, useful for library users
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AirPrivateInput(pub HashMap<&'static str, Vec<PrivateInput>>);
+pub struct AirPrivateInput(pub HashMap<BuiltinName, Vec<PrivateInput>>);
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(untagged)]
@@ -159,21 +155,21 @@ impl AirPrivateInput {
         AirPrivateInputSerializable {
             trace_path,
             memory_path,
-            pedersen: self.0.get(HASH_BUILTIN_NAME).cloned(),
-            range_check: self.0.get(RANGE_CHECK_BUILTIN_NAME).cloned(),
-            ecdsa: self.0.get(SIGNATURE_BUILTIN_NAME).cloned(),
-            bitwise: self.0.get(BITWISE_BUILTIN_NAME).cloned(),
-            ec_op: self.0.get(EC_OP_BUILTIN_NAME).cloned(),
-            keccak: self.0.get(KECCAK_BUILTIN_NAME).cloned(),
-            poseidon: self.0.get(POSEIDON_BUILTIN_NAME).cloned(),
+            pedersen: self.0.get(&BuiltinName::pedersen).cloned(),
+            range_check: self.0.get(&BuiltinName::range_check).cloned(),
+            ecdsa: self.0.get(&BuiltinName::ecdsa).cloned(),
+            bitwise: self.0.get(&BuiltinName::bitwise).cloned(),
+            ec_op: self.0.get(&BuiltinName::ec_op).cloned(),
+            keccak: self.0.get(&BuiltinName::keccak).cloned(),
+            poseidon: self.0.get(&BuiltinName::poseidon).cloned(),
             add_mod: self
                 .0
-                .get(ADD_MOD_BUILTIN_NAME)
+                .get(&BuiltinName::add_mod)
                 .and_then(|pi| pi.first())
                 .cloned(),
             mul_mod: self
                 .0
-                .get(MUL_MOD_BUILTIN_NAME)
+                .get(&BuiltinName::mul_mod)
                 .and_then(|pi| pi.first())
                 .cloned(),
         }
@@ -188,13 +184,13 @@ impl From<AirPrivateInputSerializable> for AirPrivateInput {
                 inputs.insert(input_name, input);
             }
         };
-        insert_input(HASH_BUILTIN_NAME, private_input.pedersen);
-        insert_input(RANGE_CHECK_BUILTIN_NAME, private_input.range_check);
-        insert_input(SIGNATURE_BUILTIN_NAME, private_input.ecdsa);
-        insert_input(BITWISE_BUILTIN_NAME, private_input.bitwise);
-        insert_input(EC_OP_BUILTIN_NAME, private_input.ec_op);
-        insert_input(KECCAK_BUILTIN_NAME, private_input.keccak);
-        insert_input(POSEIDON_BUILTIN_NAME, private_input.poseidon);
+        insert_input(BuiltinName::pedersen, private_input.pedersen);
+        insert_input(BuiltinName::range_check, private_input.range_check);
+        insert_input(BuiltinName::ecdsa, private_input.ecdsa);
+        insert_input(BuiltinName::bitwise, private_input.bitwise);
+        insert_input(BuiltinName::ec_op, private_input.ec_op);
+        insert_input(BuiltinName::keccak, private_input.keccak);
+        insert_input(BuiltinName::poseidon, private_input.poseidon);
 
         Self(inputs)
     }
@@ -213,10 +209,6 @@ mod tests {
     use {
         super::*,
         crate::air_private_input::{AirPrivateInput, AirPrivateInputSerializable},
-        crate::vm::runners::builtin_runner::{
-            BITWISE_BUILTIN_NAME, EC_OP_BUILTIN_NAME, HASH_BUILTIN_NAME, KECCAK_BUILTIN_NAME,
-            POSEIDON_BUILTIN_NAME, RANGE_CHECK_BUILTIN_NAME, SIGNATURE_BUILTIN_NAME,
-        },
         assert_matches::assert_matches,
     };
 
@@ -285,13 +277,13 @@ mod tests {
 
         let private_input = AirPrivateInput::from(serializable_private_input.clone());
 
-        assert_matches!(private_input.0.get(HASH_BUILTIN_NAME), data if data == serializable_private_input.pedersen.as_ref());
-        assert_matches!(private_input.0.get(RANGE_CHECK_BUILTIN_NAME), data if data == serializable_private_input.range_check.as_ref());
-        assert_matches!(private_input.0.get(SIGNATURE_BUILTIN_NAME), data if data == serializable_private_input.ecdsa.as_ref());
-        assert_matches!(private_input.0.get(BITWISE_BUILTIN_NAME), data if data == serializable_private_input.bitwise.as_ref());
-        assert_matches!(private_input.0.get(EC_OP_BUILTIN_NAME), data if data == serializable_private_input.ec_op.as_ref());
-        assert_matches!(private_input.0.get(KECCAK_BUILTIN_NAME), data if data == serializable_private_input.keccak.as_ref());
-        assert_matches!(private_input.0.get(POSEIDON_BUILTIN_NAME), data if data == serializable_private_input.poseidon.as_ref());
+        assert_matches!(private_input.0.get(&BuiltinName::pedersen), data if data == serializable_private_input.pedersen.as_ref());
+        assert_matches!(private_input.0.get(&BuiltinName::range_check), data if data == serializable_private_input.range_check.as_ref());
+        assert_matches!(private_input.0.get(&BuiltinName::ecdsa), data if data == serializable_private_input.ecdsa.as_ref());
+        assert_matches!(private_input.0.get(&BuiltinName::bitwise), data if data == serializable_private_input.bitwise.as_ref());
+        assert_matches!(private_input.0.get(&BuiltinName::ec_op), data if data == serializable_private_input.ec_op.as_ref());
+        assert_matches!(private_input.0.get(&BuiltinName::keccak), data if data == serializable_private_input.keccak.as_ref());
+        assert_matches!(private_input.0.get(&BuiltinName::poseidon), data if data == serializable_private_input.poseidon.as_ref());
     }
 
     #[test]

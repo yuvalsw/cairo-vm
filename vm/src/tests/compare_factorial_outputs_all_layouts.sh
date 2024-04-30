@@ -5,7 +5,7 @@ passed_tests=0
 failed_tests=0
 exit_code=0
 
-for layout in "plain" "small" "dex" "recursive" "starknet" "starknet_with_keccak" "recursive_large_output" "all_solidity" "starknet_with_keccak"; do
+for layout in "plain" "small" "dex" "recursive" "starknet" "starknet_with_keccak" "recursive_large_output" "recursive_with_poseidon" "all_solidity" "starknet_with_keccak"; do
     # Run cairo_vm
     echo "Running cairo-vm with layout $layout"
     cargo run -p cairo-vm-cli --release -- --layout $layout --proof_mode $factorial_compiled --trace_file factorial_rs.trace --memory_file factorial_rs.memory --air_public_input factorial_rs.air_public_input --air_private_input factorial_rs.air_private_input

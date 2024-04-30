@@ -894,7 +894,7 @@ mod tests {
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("a".to_string(), (1,4).into())
+            Err(HintError::UnknownIdentifier(bx)) if bx.as_ref() == "a"
         );
     }
 
@@ -912,7 +912,7 @@ mod tests {
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("a".to_string(), (1,4).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "a"
         );
     }
 
@@ -1061,14 +1061,14 @@ mod tests {
         let hint_code = "from starkware.cairo.common.math_utils import assert_integer\nassert_integer(ids.a)\nassert 0 <= ids.a % PRIME < range_check_builtin.bound, f'a = {ids.a} is out of range.'";
         let mut vm = vm_with_range_check!();
         //Initialize fp
-        vm.run_context.fp = 4;
+        vm.run_context.fp = 1;
         //Insert ids into memory
         vm.segments = segments![((1, 0), (10, 10))];
         let ids_data = ids_data!["a"];
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("a".to_string(), (1,3).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "a"
         );
     }
 
@@ -1103,7 +1103,7 @@ mod tests {
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("a".to_string(), (1,3).into())
+            Err(HintError::UnknownIdentifier(bx)) if bx.as_ref() == "a"
         );
     }
 
@@ -1156,7 +1156,7 @@ mod tests {
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code::ASSERT_LE_FELT, &mut exec_scopes, &constants),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("a".to_string(), (1,0).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "a"
         );
     }
 
@@ -1182,7 +1182,7 @@ mod tests {
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code::ASSERT_LE_FELT, &mut exec_scopes, &constants),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("b".to_string(), (1,1).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "b"
         );
     }
 
@@ -1412,7 +1412,7 @@ mod tests {
         let ids_data = ids_data!["value"];
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("value".to_string(), (1,4).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "value"
         );
     }
 
@@ -2234,7 +2234,7 @@ mod tests {
                     )
                 ])
             ),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("value".to_string(), (1,3).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "value"
         );
     }
 
@@ -2404,7 +2404,7 @@ mod tests {
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("a".to_string(), (1,1).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "a"
         );
     }
 
@@ -2421,7 +2421,7 @@ mod tests {
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("b".to_string(), (1,2).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "b"
         );
     }
 
@@ -2439,7 +2439,7 @@ mod tests {
         //Execute the hint
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("b".to_string(), (1,2).into())
+            Err(HintError::UnknownIdentifier(bx)) if bx.as_ref() == "b"
         );
     }
 

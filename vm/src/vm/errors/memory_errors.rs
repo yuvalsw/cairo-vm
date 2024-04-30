@@ -2,6 +2,7 @@
 #![allow(clippy::explicit_auto_deref)]
 
 use crate::stdlib::prelude::*;
+use crate::types::builtin_name::BuiltinName;
 
 use thiserror_no_std::Error;
 
@@ -48,10 +49,10 @@ pub enum MemoryError {
     GetRangeMemoryGap(Box<(Relocatable, usize)>),
     #[error("Error calculating builtin memory units")]
     ErrorCalculatingMemoryUnits,
-    #[error("Missing memory cells for builtin {0}")]
-    MissingMemoryCells(Box<&'static str>),
-    #[error("Missing memory cells for builtin {}: {:?}", (*.0).0, (*.0).1)]
-    MissingMemoryCellsWithOffsets(Box<(&'static str, Vec<usize>)>),
+    #[error("Missing memory cells for {0}")]
+    MissingMemoryCells(Box<BuiltinName>),
+    #[error("Missing memory cells for {}: {:?}", (*.0).0, (*.0).1)]
+    MissingMemoryCellsWithOffsets(Box<(BuiltinName, Vec<usize>)>),
     #[error("ErrorInitializing Verifying Key from public key: {0:?}")]
     InitializingVerifyingKey(Box<Vec<u8>>),
     #[error(
@@ -104,10 +105,10 @@ pub enum MemoryError {
 
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum InsufficientAllocatedCellsError {
-    #[error("Number of steps must be at least {} for the {} builtin.", (*.0).0, (*.0).1)]
-    MinStepNotReached(Box<(usize, &'static str)>),
-    #[error("The {} builtin used {} cells but the capacity is {}.", (*.0).0, (*.0).1, (*.0).2)]
-    BuiltinCells(Box<(&'static str, usize, usize)>),
+    #[error("Number of steps must be at least {} for the {}.", (*.0).0, (*.0).1)]
+    MinStepNotReached(Box<(usize, BuiltinName)>),
+    #[error("The {} used {} cells but the capacity is {}.", (*.0).0, (*.0).1, (*.0).2)]
+    BuiltinCells(Box<(BuiltinName, usize, usize)>),
     #[error("There are only {} cells to fill the range checks holes, but potentially {} are required.", (*.0).0, (*.0).1)]
     RangeCheckUnits(Box<(usize, usize)>),
     #[error("There are only {} cells to fill the diluted check holes, but potentially {} are required.", (*.0).0, (*.0).1)]

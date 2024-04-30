@@ -7,7 +7,6 @@ use crate::{
         collections::HashMap,
         prelude::{String, Vec},
     },
-    types::layout::CairoLayout,
     vm::{
         errors::{trace_errors::TraceError, vm_errors::VirtualMachineError},
         trace::trace_entry::RelocatedTraceEntry,
@@ -98,16 +97,14 @@ pub struct PublicInput<'a> {
     pub n_steps: usize,
     pub memory_segments: HashMap<&'a str, MemorySegmentAddresses>,
     pub public_memory: Vec<PublicMemoryEntry>,
-    #[serde(rename = "dynamic_params")]
     #[serde(skip_deserializing)] // This is set to None by default so we can skip it
-    layout_params: Option<&'a CairoLayout>,
+    dynamic_params: (),
 }
 
 impl<'a> PublicInput<'a> {
     pub fn new(
         memory: &[Option<Felt252>],
         layout: &'a str,
-        dyn_layout_params: Option<&'a CairoLayout>,
         public_memory_addresses: &[(usize, usize)],
         memory_segment_addresses: HashMap<&'static str, (usize, usize)>,
         trace: &[RelocatedTraceEntry],
@@ -136,7 +133,7 @@ impl<'a> PublicInput<'a> {
 
         Ok(PublicInput {
             layout,
-            layout_params: dyn_layout_params,
+            dynamic_params: (),
             rc_min,
             rc_max,
             n_steps: trace.len(),
@@ -219,10 +216,6 @@ mod tests {
         assert_eq!(
             public_input.public_memory,
             deserialized_public_input.public_memory
-        );
-        assert!(
-            public_input.layout_params.is_none()
-                && deserialized_public_input.layout_params.is_none()
         );
     }
 }

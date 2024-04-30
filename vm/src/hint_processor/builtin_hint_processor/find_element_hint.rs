@@ -270,7 +270,7 @@ mod tests {
         let ids_data = ids_data!["array_ptr", "elm_size", "n_elms", "index", "key"];
         assert_matches!(
             run_hint!(vm, ids_data, hint_code::FIND_ELEMENT),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("key".to_string(), (1,4).into())
+            Err(HintError::UnknownIdentifier(bx)) if bx.as_ref() == "key"
         );
     }
 
@@ -283,7 +283,7 @@ mod tests {
         )]));
         assert_matches!(
             run_hint!(vm, ids_data, hint_code::FIND_ELEMENT),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("elm_size".to_string(), (1,1).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "elm_size"
         );
     }
 
@@ -321,7 +321,7 @@ mod tests {
             init_vm_ids_data(HashMap::from([("n_elms".to_string(), relocatable)]));
         assert_matches!(
             run_hint!(vm, ids_data, hint_code::FIND_ELEMENT),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("n_elms".to_string(), (1,2).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "n_elms"
         );
     }
 
@@ -364,7 +364,7 @@ mod tests {
             init_vm_ids_data(HashMap::from([("key".to_string(), relocatable)]));
         assert_matches!(
             run_hint!(vm, ids_data, hint_code::FIND_ELEMENT),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("key".to_string(), (1,4).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "key"
         );
     }
 
@@ -403,7 +403,7 @@ mod tests {
         )]));
         assert_matches!(
             run_hint!(vm, ids_data, hint_code::SEARCH_SORTED_LOWER),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("elm_size".to_string(), (1,1).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "elm_size"
         );
     }
 
@@ -429,7 +429,7 @@ mod tests {
         )]));
         assert_matches!(
             run_hint!(vm, ids_data, hint_code::SEARCH_SORTED_LOWER),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("n_elms".to_string(), (1,2).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "n_elms"
         );
     }
 

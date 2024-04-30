@@ -138,6 +138,22 @@ impl BuiltinsInstanceDef {
         }
     }
 
+    pub(crate) fn recursive_with_poseidon() -> BuiltinsInstanceDef {
+        BuiltinsInstanceDef {
+            output: true,
+            pedersen: Some(PedersenInstanceDef::new(Some(256))),
+            range_check: Some(RangeCheckInstanceDef::new(Some(16))),
+            ecdsa: None,
+            bitwise: Some(BitwiseInstanceDef::new(Some(16))),
+            ec_op: None,
+            keccak: None,
+            poseidon: Some(PoseidonInstanceDef::new(Some(64))),
+            range_check96: None,
+            add_mod: None,
+            mul_mod: None,
+        }
+    }
+
     pub(crate) fn all_cairo() -> BuiltinsInstanceDef {
         BuiltinsInstanceDef {
             output: true,

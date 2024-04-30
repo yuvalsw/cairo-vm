@@ -1,5 +1,6 @@
 use thiserror_no_std::Error;
 
+use super::cairo_pie_errors::CairoPieValidationError;
 use super::memory_errors::MemoryError;
 use super::vm_exception::VmException;
 use crate::types::errors::program_errors::ProgramError;
@@ -21,4 +22,6 @@ pub enum CairoRunError {
     MemoryError(#[from] MemoryError),
     #[error(transparent)]
     VmException(#[from] VmException),
+    #[error("Cairo Pie validation failed: {0}")]
+    CairoPieValidation(#[from] CairoPieValidationError),
 }

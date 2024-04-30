@@ -2,6 +2,7 @@
 #![allow(clippy::explicit_auto_deref)]
 
 use crate::stdlib::prelude::*;
+use crate::types::builtin_name::BuiltinName;
 
 use thiserror_no_std::Error;
 
@@ -77,8 +78,8 @@ pub enum VirtualMachineError {
     InvalidOpcode(u64),
     #[error("This is not implemented")]
     NotImplemented,
-    #[error("Inconsistent auto-deduction for builtin {}, expected {}, got {:?}", (*.0).0, (*.0).1, (*.0).2)]
-    InconsistentAutoDeduction(Box<(&'static str, MaybeRelocatable, Option<MaybeRelocatable>)>),
+    #[error("Inconsistent auto-deduction for {}, expected {}, got {:?}", (*.0).0, (*.0).1, (*.0).2)]
+    InconsistentAutoDeduction(Box<(BuiltinName, MaybeRelocatable, Option<MaybeRelocatable>)>),
     #[error("Invalid hint encoding at pc: {0}")]
     InvalidHintEncoding(Box<MaybeRelocatable>),
     #[error("Expected output builtin to be present")]
@@ -88,7 +89,7 @@ pub enum VirtualMachineError {
     #[error("Expected ecdsa builtin to be present")]
     NoSignatureBuiltin,
     #[error("Expected {0} to be present")]
-    NoModBuiltin(&'static str),
+    NoModBuiltin(BuiltinName),
     #[error("Div out of range: 0 < {} <= {}", (*.0).0, (*.0).1)]
     OutOfValidRange(Box<(Felt252, Felt252)>),
     #[error("Failed to compare {} and {}, cant compare a relocatable to an integer value", (*.0).0, (*.0).1)]
@@ -134,7 +135,7 @@ pub enum VirtualMachineError {
     #[error("Failed to find index {0} in the vm's relocation table")]
     RelocationNotFound(usize),
     #[error("{} batch size is not {}", (*.0).0, (*.0).1)]
-    ModBuiltinBatchSize(Box<(&'static str, usize)>),
+    ModBuiltinBatchSize(Box<(BuiltinName, usize)>),
 }
 
 #[cfg(test)]

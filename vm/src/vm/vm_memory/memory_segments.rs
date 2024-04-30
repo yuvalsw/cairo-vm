@@ -1,6 +1,7 @@
 use core::cmp::max;
 use core::fmt;
 
+use crate::vm::runners::cairo_pie::CairoPieMemory;
 use crate::Felt252;
 use num_traits::Zero;
 
@@ -307,6 +308,22 @@ impl MemorySegmentManager {
             self.zero_segment_index = 0;
             self.zero_segment_size = 0;
         }
+    }
+
+    pub(crate) fn load_pie_memory(
+        &mut self,
+        pie_memory: &CairoPieMemory,
+        n_extra_segments: usize,
+    ) -> Result<(), MemoryError> {
+        // Create extra segments
+        for _ in 0..n_extra_segments {
+            self.add();
+        }
+        // Load previous execution memory
+        for ((si, so), val) in pie_memory.0.iter() {
+            self.memory.insert((*si as isize, *so).into(), val)?;
+        }
+        Ok(())
     }
 }
 

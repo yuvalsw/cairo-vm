@@ -1,5 +1,6 @@
 use crate::air_private_input::{PrivateInput, PrivateInputPoseidonState};
 use crate::stdlib::{cell::RefCell, collections::HashMap, prelude::*};
+use crate::types::builtin_name::BuiltinName;
 use crate::types::errors::math_errors::MathError;
 use crate::types::instance_definitions::poseidon_instance_def::{
     CELLS_PER_POSEIDON, INPUT_CELLS_PER_POSEIDON,
@@ -12,8 +13,6 @@ use crate::vm::vm_memory::memory_segments::MemorySegmentManager;
 use crate::Felt252;
 use num_integer::div_ceil;
 use starknet_crypto::{poseidon_permute_comp, FieldElement};
-
-use super::POSEIDON_BUILTIN_NAME;
 
 #[derive(Debug, Clone)]
 pub struct PoseidonBuiltinRunner {
@@ -81,7 +80,7 @@ impl PoseidonBuiltinRunner {
                     let num = value
                         .get_int_ref()
                         .ok_or(RunnerError::BuiltinExpectedInteger(Box::new((
-                            POSEIDON_BUILTIN_NAME,
+                            BuiltinName::poseidon,
                             (first_input_addr + i)?,
                         ))))?;
                     FieldElement::from_bytes_be(&num.to_bytes_be())
@@ -150,7 +149,7 @@ mod tests {
     use super::*;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
     use crate::relocatable;
-    use crate::serde::deserialize_program::BuiltinName;
+    use crate::types::builtin_name::BuiltinName;
     use crate::types::program::Program;
     use crate::utils::test_utils::*;
     use crate::vm::runners::cairo_runner::CairoRunner;
@@ -226,7 +225,7 @@ mod tests {
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
             Err(RunnerError::InvalidStopPointer(Box::new((
-                POSEIDON_BUILTIN_NAME,
+                BuiltinName::poseidon,
                 relocatable!(0, 1002),
                 relocatable!(0, 0)
             ))))
@@ -277,7 +276,7 @@ mod tests {
 
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
-            Err(RunnerError::NoStopPointer(Box::new(POSEIDON_BUILTIN_NAME)))
+            Err(RunnerError::NoStopPointer(Box::new(BuiltinName::poseidon)))
         );
     }
 

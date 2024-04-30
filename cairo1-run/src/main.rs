@@ -1,17 +1,12 @@
 use bincode::enc::write::Writer;
-use cairo_lang_compiler::{compile_cairo_project_at_path, CompilerConfig};
-use cairo_lang_sierra::{ids::ConcreteTypeId, program_registry::ProgramRegistryError};
-use cairo_lang_sierra_to_casm::{compiler::CompilationError, metadata::MetadataError};
-use cairo_run::Cairo1RunConfig;
+use cairo1_run::error::Error;
+use cairo1_run::{cairo_run_program, Cairo1RunConfig, FuncArg};
+use cairo_lang_compiler::{
+    compile_prepared_db, db::RootDatabase, project::setup_project, CompilerConfig,
+};
 use cairo_vm::{
-    air_public_input::PublicInputError,
-    cairo_run::EncodeTraceError,
-    types::{errors::program_errors::ProgramError, layout_name::LayoutName},
-    vm::errors::{
-        memory_errors::MemoryError, runner_errors::RunnerError, trace_errors::TraceError,
-        vm_errors::VirtualMachineError,
-    },
-    Felt252,
+    air_public_input::PublicInputError, types::layout_name::LayoutName,
+    vm::errors::trace_errors::TraceError, Felt252,
 };
 use clap::{Parser, ValueHint};
 use itertools::Itertools;
@@ -19,9 +14,6 @@ use std::{
     io::{self, Write},
     path::PathBuf,
 };
-use thiserror::Error;
-
-pub mod cairo_run;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -65,12 +57,6 @@ struct Args {
     append_return_values: bool,
 }
 
-#[derive(Debug, Clone)]
-pub enum FuncArg {
-    Array(Vec<Felt252>),
-    Single(Felt252),
-}
-
 #[derive(Debug, Clone, Default)]
 struct FuncArgs(Vec<FuncArg>);
 
@@ -107,55 +93,6 @@ fn process_args(value: &str) -> Result<FuncArgs, String> {
         }
     }
     Ok(FuncArgs(args))
-}
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("Invalid arguments")]
-    Cli(#[from] clap::Error),
-    #[error("Failed to interact with the file system")]
-    IO(#[from] std::io::Error),
-    #[error(transparent)]
-    EncodeTrace(#[from] EncodeTraceError),
-    #[error(transparent)]
-    VirtualMachine(#[from] VirtualMachineError),
-    #[error(transparent)]
-    Trace(#[from] TraceError),
-    #[error(transparent)]
-    PublicInput(#[from] PublicInputError),
-    #[error(transparent)]
-    Runner(#[from] RunnerError),
-    #[error(transparent)]
-    ProgramRegistry(#[from] Box<ProgramRegistryError>),
-    #[error(transparent)]
-    Compilation(#[from] Box<CompilationError>),
-    #[error("Failed to compile to sierra:\n {0}")]
-    SierraCompilation(String),
-    #[error(transparent)]
-    Metadata(#[from] MetadataError),
-    #[error(transparent)]
-    Program(#[from] ProgramError),
-    #[error(transparent)]
-    Memory(#[from] MemoryError),
-    #[error("Program panicked with {0:?}")]
-    RunPanic(Vec<Felt252>),
-    #[error("Function signature has no return types")]
-    NoRetTypesInSignature,
-    #[error("No size for concrete type id: {0}")]
-    NoTypeSizeForId(ConcreteTypeId),
-    #[error("Concrete type id has no debug name: {0}")]
-    TypeIdNoDebugName(ConcreteTypeId),
-    #[error("No info in sierra program registry for concrete type id: {0}")]
-    NoInfoForType(ConcreteTypeId),
-    #[error("Failed to extract return values from VM")]
-    FailedToExtractReturnValues,
-    #[error("Function expects arguments of size {expected} and received {actual} instead.")]
-    ArgumentsSizeMismatch { expected: i16, actual: i16 },
-    #[error("Function param {param_index} only partially contains argument {arg_index}.")]
-    ArgumentUnaligned {
-        param_index: usize,
-        arg_index: usize,
-    },
 }
 
 pub struct FileWriter {
@@ -205,16 +142,27 @@ fn run(args: impl Iterator<Item = String>) -> Result<Option<String>, Error> {
         append_return_values: args.append_return_values,
     };
 
-    let compiler_config = CompilerConfig {
-        replace_ids: true,
-        ..CompilerConfig::default()
+    // Try to parse the file as a sierra program
+    let file = std::fs::read(&args.filename)?;
+    let sierra_program = match serde_json::from_slice(&file) {
+        Ok(program) => program,
+        Err(_) => {
+            // If it fails, try to compile it as a cairo program
+            let compiler_config = CompilerConfig {
+                replace_ids: true,
+                ..CompilerConfig::default()
+            };
+            let mut db = RootDatabase::builder()
+                .detect_corelib()
+                .skip_auto_withdraw_gas()
+                .build()
+                .unwrap();
+            let main_crate_ids = setup_project(&mut db, &args.filename).unwrap();
+            compile_prepared_db(&mut db, main_crate_ids, compiler_config).unwrap()
+        }
     };
 
-    let sierra_program = compile_cairo_project_at_path(&args.filename, compiler_config)
-        .map_err(|err| Error::SierraCompilation(err.to_string()))?;
-
-    let (runner, vm, _, serialized_output) =
-        cairo_run::cairo_run_program(&sierra_program, cairo_run_config)?;
+    let (runner, vm, _, serialized_output) = cairo_run_program(&sierra_program, cairo_run_config)?;
 
     if let Some(file_path) = args.air_public_input {
         let json = runner.get_air_public_input(&vm)?.serialize_json()?;
@@ -326,6 +274,14 @@ mod tests {
     fn test_run_factorial_ok(#[case] args: &[&str]) {
         let args = args.iter().cloned().map(String::from);
         assert_matches!(run(args), Ok(Some(res)) if res == "3628800");
+    }
+
+    #[rstest]
+    #[case(["cairo1-run", "../cairo_programs/cairo-1-programs/bitwise.cairo", "--print_output", "--trace_file", "/dev/null", "--memory_file", "/dev/null", "--layout", "all_cairo", "--cairo_pie_output", "/dev/null"].as_slice())]
+    #[case(["cairo1-run", "../cairo_programs/cairo-1-programs/bitwise.cairo", "--print_output", "--trace_file", "/dev/null", "--memory_file", "/dev/null", "--layout", "all_cairo", "--proof_mode", "--air_public_input", "/dev/null", "--air_private_input", "/dev/null"].as_slice())]
+    fn test_run_bitwise_ok(#[case] args: &[&str]) {
+        let args = args.iter().cloned().map(String::from);
+        assert_matches!(run(args), Ok(Some(res)) if res == "11772");
     }
 
     #[rstest]

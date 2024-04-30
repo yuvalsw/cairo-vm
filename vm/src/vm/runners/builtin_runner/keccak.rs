@@ -1,6 +1,7 @@
 use crate::air_private_input::{PrivateInput, PrivateInputKeccakState};
 use crate::math_utils::safe_div_usize;
 use crate::stdlib::{cell::RefCell, collections::HashMap, prelude::*};
+use crate::types::builtin_name::BuiltinName;
 use crate::types::instance_definitions::keccak_instance_def::{
     CELLS_PER_KECCAK, INPUT_CELLS_PER_KECCAK,
 };
@@ -13,8 +14,6 @@ use crate::Felt252;
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_integer::div_ceil;
-
-use super::KECCAK_BUILTIN_NAME;
 
 const KECCAK_FELT_BYTE_SIZE: usize = 25; // 200 / 8
 const BITS: u32 = 200;
@@ -86,7 +85,7 @@ impl KeccakBuiltinRunner {
                     let num = value
                         .get_int_ref()
                         .ok_or(RunnerError::BuiltinExpectedInteger(Box::new((
-                            KECCAK_BUILTIN_NAME,
+                            BuiltinName::keccak,
                             (first_input_addr + i)?,
                         ))))?;
                     if num >= &KECCAK_INPUT_MAX {
@@ -282,7 +281,7 @@ mod tests {
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
             Err(RunnerError::InvalidStopPointer(Box::new((
-                KECCAK_BUILTIN_NAME,
+                BuiltinName::keccak,
                 relocatable!(0, 992),
                 relocatable!(0, 0)
             ))))
@@ -333,7 +332,7 @@ mod tests {
 
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
-            Err(RunnerError::NoStopPointer(Box::new(KECCAK_BUILTIN_NAME)))
+            Err(RunnerError::NoStopPointer(Box::new(BuiltinName::keccak)))
         );
     }
 
@@ -499,7 +498,7 @@ mod tests {
         assert_eq!(
             result,
             Err(RunnerError::BuiltinExpectedInteger(Box::new((
-                KECCAK_BUILTIN_NAME,
+                BuiltinName::keccak,
                 (0, 0).into()
             ))))
         );

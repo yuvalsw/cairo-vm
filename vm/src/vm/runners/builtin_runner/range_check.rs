@@ -4,6 +4,7 @@ use crate::{
         cmp::{max, min},
         prelude::*,
     },
+    types::builtin_name::BuiltinName,
 };
 
 use crate::Felt252;
@@ -19,8 +20,6 @@ use crate::{
 };
 
 use lazy_static::lazy_static;
-
-use super::{RANGE_CHECK_96_BUILTIN_NAME, RANGE_CHECK_BUILTIN_NAME};
 
 const INNER_RC_BOUND_SHIFT: u64 = 16;
 const INNER_RC_BOUND_MASK: u64 = u16::MAX as u64;
@@ -72,10 +71,10 @@ impl<const N_PARTS: u64> RangeCheckBuiltinRunner<N_PARTS> {
         self.ratio
     }
 
-    pub fn name(&self) -> &'static str {
+    pub fn name(&self) -> BuiltinName {
         match N_PARTS {
-            RC_N_PARTS_96 => RANGE_CHECK_96_BUILTIN_NAME,
-            _ => RANGE_CHECK_BUILTIN_NAME,
+            RC_N_PARTS_96 => BuiltinName::range_check96,
+            _ => BuiltinName::range_check,
         }
     }
 
@@ -166,9 +165,8 @@ impl<const N_PARTS: u64> RangeCheckBuiltinRunner<N_PARTS> {
 mod tests {
     use super::*;
     use crate::relocatable;
-    use crate::serde::deserialize_program::BuiltinName;
+    use crate::types::builtin_name::BuiltinName;
     use crate::vm::errors::runner_errors::RunnerError;
-    use crate::vm::runners::builtin_runner::RANGE_CHECK_BUILTIN_NAME;
     use crate::vm::vm_memory::memory::Memory;
     use crate::{
         hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor,
@@ -241,7 +239,7 @@ mod tests {
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
             Err(RunnerError::InvalidStopPointer(Box::new((
-                RANGE_CHECK_BUILTIN_NAME,
+                BuiltinName::range_check,
                 relocatable!(0, 998),
                 relocatable!(0, 0)
             ))))
@@ -295,7 +293,7 @@ mod tests {
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
             Err(RunnerError::NoStopPointer(Box::new(
-                RANGE_CHECK_BUILTIN_NAME
+                BuiltinName::range_check
             )))
         );
     }

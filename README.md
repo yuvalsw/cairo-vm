@@ -174,9 +174,11 @@ The cairo-vm-cli supports the following optional arguments:
 
 - `--air_private_input <AIR_PRIVATE_INPUT>`: Receives the name of a file and outputs the AIR private inputs into it. Can only be used if proof_mode, trace_file & memory_file are also enabled.
 
-- `--cairo_pie_output <CAIRO_PIE_OUTPUT>`: Receives the name of a file and outputs the Cairo PIE into it. Can only be used if proof_mode, is not enabled.
+- `--cairo_pie_output <CAIRO_PIE_OUTPUT>`: Receives the name of a file and outputs the Cairo PIE into it. Can only be used if proof_mode is not enabled.
 
 - `--allow_missing_builtins`: Disables the check that all builtins used by the program need to be included in the selected layout. Enabled by default when in proof_mode.
+
+- `run_from_cairo_pie`: Runs a Cairo PIE instead of a compiled json file. The name of the file will be the first argument received by the CLI (as if it were to run a normal compiled program). Can only be used if proof_mode is not enabled.
 
 For example, to obtain the air public inputs from a fibonacci program run, we can run :
 

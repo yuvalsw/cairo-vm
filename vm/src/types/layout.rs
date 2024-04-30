@@ -87,6 +87,15 @@ impl CairoLayout {
             diluted_pool_instance_def: Some(DilutedPoolInstanceDef::default()),
         }
     }
+    pub(crate) fn recursive_with_poseidon() -> CairoLayout {
+        CairoLayout {
+            name: LayoutName::recursive_with_poseidon,
+            rc_units: 4,
+            builtins: BuiltinsInstanceDef::recursive_with_poseidon(),
+            public_memory_fraction: 8,
+            diluted_pool_instance_def: Some(DilutedPoolInstanceDef::new(8, 4, 16)),
+        }
+    }
 
     pub(crate) fn all_cairo_instance() -> CairoLayout {
         CairoLayout {

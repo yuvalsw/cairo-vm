@@ -2,8 +2,8 @@ use starknet_crypto::{pedersen_hash, FieldElement};
 
 use crate::Felt252;
 
-use crate::serde::deserialize_program::BuiltinName;
 use crate::stdlib::vec::Vec;
+use crate::types::builtin_name::BuiltinName;
 use crate::types::relocatable::MaybeRelocatable;
 use crate::vm::runners::cairo_pie::StrippedProgram;
 
@@ -36,11 +36,8 @@ pub enum ProgramHashError {
 
 /// Computes a hash chain over the data, in the following order:
 ///     h(data[0], h(data[1], h(..., h(data[n-2], data[n-1])))).
-///
-/// Reimplements this Python function:
-/// def compute_hash_chain(data, hash_func=pedersen_hash):
-///     assert len(data) >= 1, f"len(data) for hash chain computation must be >= 1; got: {len(data)}."
-///     return functools.reduce(lambda x, y: hash_func(y, x), data[::-1])
+/// [cairo_lang reference](https://github.com/starkware-libs/cairo-lang/blob/efa9648f57568aad8f8a13fbf027d2de7c63c2c0/src/starkware/cairo/common/hash_chain.py#L6)
+
 fn compute_hash_chain<'a, I>(
     data: I,
     hash_func: HashFunction,
@@ -58,15 +55,12 @@ where
 ///
 /// Converts the builtin name to bytes then attempts to create a field element from
 /// these bytes. This function will fail if the builtin name is over 31 characters.
-fn builtin_to_field_element(builtin: &BuiltinName) -> Result<FieldElement, ProgramHashError> {
+fn builtin_name_to_field_element(
+    builtin_name: &BuiltinName,
+) -> Result<FieldElement, ProgramHashError> {
     // The Python implementation uses the builtin name without suffix
-    let builtin_name = builtin
-        .name()
-        .strip_suffix("_builtin")
-        .unwrap_or(builtin.name());
-
-    FieldElement::from_byte_slice_be(builtin_name.as_bytes())
-        .map_err(|_| ProgramHashError::InvalidProgramBuiltin(builtin.name()))
+    FieldElement::from_byte_slice_be(builtin_name.to_str().as_bytes())
+        .map_err(|_| ProgramHashError::InvalidProgramBuiltin(builtin_name.to_str()))
 }
 
 /// The `value: FieldElement` is `pub(crate)` and there is no accessor.
@@ -91,15 +85,7 @@ fn maybe_relocatable_to_field_element(
 }
 
 /// Computes the Pedersen hash of a program.
-///
-/// Reimplements this Python function:
-/// def compute_program_hash_chain(program: ProgramBase, bootloader_version=0):
-///     builtin_list = [from_bytes(builtin.encode("ascii")) for builtin in program.builtins]
-///     # The program header below is missing the data length, which is later added to the data_chain.
-///     program_header = [bootloader_version, program.main, len(program.builtins)] + builtin_list
-///     data_chain = program_header + program.data
-///
-///     return compute_hash_chain([len(data_chain)] + data_chain)
+/// [(cairo_lang reference)](https://github.com/starkware-libs/cairo-lang/blob/efa9648f57568aad8f8a13fbf027d2de7c63c2c0/src/starkware/cairo/bootloaders/hash_program.py#L11)
 pub fn compute_program_hash_chain(
     program: &StrippedProgram,
     bootloader_version: usize,
@@ -111,7 +97,7 @@ pub fn compute_program_hash_chain(
     let builtin_list: Result<Vec<FieldElement>, _> = program
         .builtins
         .iter()
-        .map(builtin_to_field_element)
+        .map(builtin_name_to_field_element)
         .collect();
     let builtin_list = builtin_list?;
 

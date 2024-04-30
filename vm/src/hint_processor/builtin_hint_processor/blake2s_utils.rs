@@ -367,7 +367,7 @@ mod tests {
         assert_matches!(
             run_hint!(vm, ids_data, hint_code),
             Err(HintError::IdentifierNotRelocatable(bx))
-            if *bx == ("output".to_string(), (1,0).into())
+            if bx.as_ref() == "output"
         );
     }
 

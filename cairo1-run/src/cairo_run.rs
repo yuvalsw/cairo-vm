@@ -1,12 +1,19 @@
+use crate::error::Error;
 use cairo_lang_casm::{
-    casm, casm_extend, hints::Hint, inline::CasmContext, instructions::Instruction,
+    builder::{CasmBuilder, Var},
+    casm, casm_build_extend,
+    cell_expression::CellExpression,
+    deref, deref_or_immediate,
+    hints::Hint,
+    inline::CasmContext,
+    instructions::{Instruction, InstructionBody},
 };
 use cairo_lang_sierra::{
     extensions::{
         bitwise::BitwiseType,
         core::{CoreLibfunc, CoreType},
         ec::EcOpType,
-        gas::{CostTokenType, GasBuiltinType},
+        gas::GasBuiltinType,
         pedersen::PedersenType,
         poseidon::PoseidonType,
         range_check::RangeCheckType,
@@ -14,34 +21,28 @@ use cairo_lang_sierra::{
         starknet::syscalls::SystemType,
         ConcreteType, NamedType,
     },
-    ids::ConcreteTypeId,
+    ids::{ConcreteTypeId, GenericTypeId},
     program::{Function, GenericArg, Program as SierraProgram},
     program_registry::ProgramRegistry,
 };
-use cairo_lang_sierra_ap_change::calc_ap_changes;
-use cairo_lang_sierra_gas::{gas_info::GasInfo, objects::CostInfoProvider};
+use cairo_lang_sierra_gas::objects::CostInfoProvider;
 use cairo_lang_sierra_to_casm::{
-    compiler::CairoProgram,
-    metadata::{calc_metadata, Metadata, MetadataComputationConfig, MetadataError},
+    compiler::{CairoProgram, SierraToCasmConfig},
+    metadata::calc_metadata_ap_change_only,
 };
 use cairo_lang_sierra_type_size::get_type_size_map;
 use cairo_lang_utils::{casts::IntoOrPanic, unordered_hash_map::UnorderedHashMap};
 use cairo_vm::{
     hint_processor::cairo_1_hint_processor::hint_processor::Cairo1HintProcessor,
     math_utils::signed_felt,
-    serde::deserialize_program::{
-        ApTracking, BuiltinName, FlowTrackingData, HintParams, ReferenceManager,
+    serde::deserialize_program::{ApTracking, FlowTrackingData, HintParams, ReferenceManager},
+    types::{
+        builtin_name::BuiltinName, layout_name::LayoutName, program::Program,
+        relocatable::MaybeRelocatable,
     },
-    types::{layout_name::LayoutName, program::Program, relocatable::MaybeRelocatable},
     vm::{
         errors::{runner_errors::RunnerError, vm_errors::VirtualMachineError},
-        runners::{
-            builtin_runner::{
-                BITWISE_BUILTIN_NAME, EC_OP_BUILTIN_NAME, HASH_BUILTIN_NAME, OUTPUT_BUILTIN_NAME,
-                POSEIDON_BUILTIN_NAME, RANGE_CHECK_BUILTIN_NAME, SIGNATURE_BUILTIN_NAME,
-            },
-            cairo_runner::{CairoRunner, RunResources, RunnerMode},
-        },
+        runners::cairo_runner::{CairoRunner, RunResources, RunnerMode},
         vm_core::VirtualMachine,
     },
     Felt252,
@@ -50,21 +51,45 @@ use itertools::{chain, Itertools};
 use num_traits::{cast::ToPrimitive, Zero};
 use std::{collections::HashMap, iter::Peekable};
 
-use crate::{Error, FuncArg};
+/// Representation of a cairo argument
+/// Can consist of a single Felt or an array of Felts
+#[derive(Debug, Clone)]
+pub enum FuncArg {
+    Array(Vec<Felt252>),
+    Single(Felt252),
+}
 
+impl From<Felt252> for FuncArg {
+    fn from(value: Felt252) -> Self {
+        Self::Single(value)
+    }
+}
+
+impl From<Vec<Felt252>> for FuncArg {
+    fn from(value: Vec<Felt252>) -> Self {
+        Self::Array(value)
+    }
+}
+
+/// Configuration parameters for a cairo run
 #[derive(Debug)]
 pub struct Cairo1RunConfig<'a> {
+    /// Input arguments for the `main` function in the cairo progran
     pub args: &'a [FuncArg],
-    // Serializes program output into a user-friendly format
+    /// Serialize program output into a user-friendly format
     pub serialize_output: bool,
+    /// Compute cairo trace during execution
     pub trace_enabled: bool,
+    /// Relocate cairo memory at the end of the run
     pub relocate_mem: bool,
+    /// Cairo layout chosen for the run
     pub layout: LayoutName,
+    /// Run in proof_mode
     pub proof_mode: bool,
-    // Should be true if either air_public_input or cairo_pie_output are needed
-    // Sets builtins stop_ptr by calling `final_stack` on each builtin
+    /// Should be true if either air_public_input or cairo_pie_output are needed
+    /// Sets builtins stop_ptr by calling `final_stack` on each builtin
     pub finalize_builtins: bool,
-    // Appends return values to the output segment. This is performed by default when running in proof_mode
+    /// Appends return values to the output segment. This is performed by default when running in proof_mode
     pub append_return_values: bool,
 }
 
@@ -97,12 +122,17 @@ pub fn cairo_run_program(
     ),
     Error,
 > {
-    let metadata = create_metadata(sierra_program, Some(Default::default()))?;
+    let metadata = calc_metadata_ap_change_only(sierra_program)
+        .map_err(|_| VirtualMachineError::Unexpected)?;
     let sierra_program_registry = ProgramRegistry::<CoreType, CoreLibfunc>::new(sierra_program)?;
     let type_sizes =
         get_type_size_map(sierra_program, &sierra_program_registry).unwrap_or_default();
+    let config = SierraToCasmConfig {
+        gas_usage_check: false,
+        max_bytecode_size: usize::MAX,
+    };
     let casm_program =
-        cairo_lang_sierra_to_casm::compiler::compile(sierra_program, &metadata, true)?;
+        cairo_lang_sierra_to_casm::compiler::compile(sierra_program, &metadata, config)?;
 
     let main_func = find_function(sierra_program, "::main")?;
 
@@ -120,15 +150,11 @@ pub fn cairo_run_program(
     )?;
 
     // Fetch return type data
-    let return_type_id = main_func
-        .signature
-        .ret_types
-        .last()
-        .ok_or(Error::NoRetTypesInSignature)?;
-    let return_type_size = type_sizes
-        .get(return_type_id)
-        .cloned()
-        .ok_or_else(|| Error::NoTypeSizeForId(return_type_id.clone()))?;
+
+    let return_type_id = main_func.signature.ret_types.last();
+    let return_type_size = return_type_id
+        .and_then(|id| type_sizes.get(id).cloned())
+        .unwrap_or_default();
 
     // This footer is used by lib funcs
     let libfunc_footer = create_code_footer();
@@ -151,8 +177,6 @@ pub fn cairo_run_program(
         .map(|x| Felt252::from(&x))
         .map(MaybeRelocatable::from)
         .collect();
-
-    let data_len = data.len();
 
     let program = if cairo_run_config.proof_mode {
         Program::new_for_proof(
@@ -195,8 +219,6 @@ pub fn cairo_run_program(
     let mut vm = VirtualMachine::new(cairo_run_config.trace_enabled);
     let end = runner.initialize(&mut vm, cairo_run_config.proof_mode)?;
 
-    additional_initialization(&mut vm, data_len)?;
-
     // Run it until the end / infinite loop in proof_mode
     runner.run_until_pc(end, &mut vm, &mut hint_processor)?;
     if cairo_run_config.proof_mode {
@@ -236,10 +258,7 @@ pub fn cairo_run_program(
                     .iter()
                     .enumerate()
                     .map(|(i, builtin)| {
-                        (
-                            builtin.name(),
-                            (vm.get_ap() - (builtins.len() - 1 - i)).unwrap(),
-                        )
+                        (*builtin, (vm.get_ap() - (builtins.len() - 1 - i)).unwrap())
                     })
                     .collect(),
                 false,
@@ -262,26 +281,6 @@ pub fn cairo_run_program(
     runner.relocate(&mut vm, true)?;
 
     Ok((runner, vm, return_values, serialized_output))
-}
-
-fn additional_initialization(vm: &mut VirtualMachine, data_len: usize) -> Result<(), Error> {
-    // Create the builtin cost segment
-    let builtin_cost_segment = vm.add_memory_segment();
-    for token_type in CostTokenType::iter_precost() {
-        vm.insert_value(
-            (builtin_cost_segment + (token_type.offset_in_builtin_costs() as usize))
-                .map_err(VirtualMachineError::Math)?,
-            Felt252::default(),
-        )?
-    }
-    // Put a pointer to the builtin cost segment at the end of the program (after the
-    // additional `ret` statement).
-    vm.insert_value(
-        (vm.get_pc() + data_len).map_err(VirtualMachineError::Math)?,
-        builtin_cost_segment,
-    )?;
-
-    Ok(())
 }
 
 #[allow(clippy::type_complexity)]
@@ -356,97 +355,117 @@ fn create_entry_code(
     // The builtins in the formatting expected by the runner.
     let (builtins, builtin_offset) =
         get_function_builtins(&signature.param_types, copy_to_output_builtin);
-    let mut ctx = casm! {};
+    let mut ctx = CasmBuilder::default();
+    // Getting a variable pointing to the location of each builtin.
+    let mut builtin_vars =
+        HashMap::<GenericTypeId, Var>::from_iter(builtin_offset.iter().map(|(id, offset)| {
+            (
+                id.clone(),
+                ctx.add_var(CellExpression::Deref(deref!([fp - offset]))),
+            )
+        }));
+    // Getting a variable for the location output builtin if required.
+    let output_ptr = copy_to_output_builtin.then(|| {
+        let offset: i16 = 2 + builtins.len().into_or_panic::<i16>();
+        ctx.add_var(CellExpression::Deref(deref!([fp - offset])))
+    });
+    let got_segment_arena = signature.param_types.iter().any(|ty| {
+        get_info(sierra_program_registry, ty)
+            .map(|x| x.long_id.generic_id == SegmentArenaType::ID)
+            .unwrap_or_default()
+    });
+    if got_segment_arena {
+        // Allocating local vars to save the builtins for the validations.
+        for _ in 0..builtins.len() {
+            casm_build_extend!(ctx, tempvar _local;);
+        }
+        casm_build_extend!(ctx, ap += builtins.len(););
+    }
     // Load all vecs to memory.
     // Load all array args content to memory.
     let mut array_args_data = vec![];
-    let mut ap_offset: i16 = 0;
     for arg in config.args {
         let FuncArg::Array(values) = arg else {
             continue;
         };
-        array_args_data.push(ap_offset);
-        casm_extend! {ctx,
-            %{ memory[ap + 0] = segments.add() %}
+        casm_build_extend! {ctx,
+            tempvar arr;
+            hint AllocSegment {} into {dst: arr};
             ap += 1;
-        }
+        };
+        array_args_data.push(arr);
         for (i, v) in values.iter().enumerate() {
-            let arr_at = (i + 1) as i16;
-            casm_extend! {ctx,
-                [ap + 0] = (v.to_bigint());
-                [ap + 0] = [[ap - arr_at] + (i as i16)], ap++;
+            casm_build_extend! {ctx,
+                const cvalue = v.to_bigint();
+                tempvar value = cvalue;
+                assert value = arr[i.to_i16().unwrap()];
             };
         }
-        ap_offset += (1 + values.len()) as i16;
     }
-    let mut array_args_data_iter = array_args_data.iter();
-    let after_arrays_data_offset = ap_offset;
+    let mut array_args_data_iter = array_args_data.into_iter();
     let mut arg_iter = config.args.iter().enumerate();
     let mut param_index = 0;
     let mut expected_arguments_size = 0;
-    if signature.param_types.iter().any(|ty| {
-        get_info(sierra_program_registry, ty)
-            .map(|x| x.long_id.generic_id == SegmentArenaType::ID)
-            .unwrap_or_default()
-    }) {
-        casm_extend! {ctx,
-            // SegmentArena segment.
-            %{ memory[ap + 0] = segments.add() %}
-            // Infos segment.
-            %{ memory[ap + 1] = segments.add() %}
-            ap += 2;
-            [ap + 0] = 0, ap++;
+    if got_segment_arena {
+        // Allocating the segment arena and initializing it.
+        casm_build_extend! {ctx,
+            tempvar segment_arena;
+            tempvar infos;
+            hint AllocSegment {} into {dst: segment_arena};
+            hint AllocSegment {} into {dst: infos};
+            const czero = 0;
+            tempvar zero = czero;
             // Write Infos segment, n_constructed (0), and n_destructed (0) to the segment.
-            [ap - 2] = [[ap - 3]];
-            [ap - 1] = [[ap - 3] + 1];
-            [ap - 1] = [[ap - 3] + 2];
+            assert infos = *(segment_arena++);
+            assert zero = *(segment_arena++);
+            assert zero = *(segment_arena++);
         }
-        ap_offset += 3;
-    }
+        // Adding the segment arena to the builtins var map.
+        builtin_vars.insert(SegmentArenaType::ID, segment_arena);
+    };
 
     for ty in &signature.param_types {
         let info = get_info(sierra_program_registry, ty)
             .ok_or_else(|| Error::NoInfoForType(ty.clone()))?;
         let generic_ty = &info.long_id.generic_id;
-        if let Some(offset) = builtin_offset.get(generic_ty) {
-            casm_extend!(ctx, [ap + 0] = [fp - *offset], ap++;);
-            ap_offset += 1;
+        if let Some(var) = builtin_vars.get(generic_ty).cloned() {
+            casm_build_extend!(ctx, tempvar _builtin = var;);
         } else if generic_ty == &SystemType::ID {
-            casm_extend! {ctx,
-                %{ memory[ap + 0] = segments.add() %}
+            casm_build_extend! {ctx,
+                tempvar system;
+                hint AllocSegment {} into {dst: system};
                 ap += 1;
-            }
-            ap_offset += 1;
+            };
         } else if generic_ty == &GasBuiltinType::ID {
-            casm_extend!(ctx, [ap + 0] = initial_gas, ap++;);
-            ap_offset += 1;
-        } else if generic_ty == &SegmentArenaType::ID {
-            let offset = -ap_offset + after_arrays_data_offset;
-            casm_extend!(ctx, [ap + 0] = [ap + offset] + 3, ap++;);
-            ap_offset += 1;
+            casm_build_extend! {ctx,
+                const initial_gas = initial_gas;
+                tempvar _gas = initial_gas;
+            };
         } else {
             let ty_size = type_sizes[ty];
-            let param_ap_offset_end = ap_offset + ty_size;
+            let mut param_accum_size = 0;
             expected_arguments_size += ty_size;
-            while ap_offset < param_ap_offset_end {
+            while param_accum_size < ty_size {
                 let Some((arg_index, arg)) = arg_iter.next() else {
                     break;
                 };
                 match arg {
                     FuncArg::Single(value) => {
-                        casm_extend! {ctx,
-                            [ap + 0] = (value.to_bigint()), ap++;
-                        }
-                        ap_offset += 1;
+                        casm_build_extend! {ctx,
+                            const value = value.to_bigint();
+                            tempvar _value = value;
+                        };
+                        param_accum_size += 1;
                     }
                     FuncArg::Array(values) => {
-                        let offset = -ap_offset + array_args_data_iter.next().unwrap();
-                        casm_extend! {ctx,
-                            [ap + 0] = [ap + (offset)], ap++;
-                            [ap + 0] = [ap - 1] + (values.len()), ap++;
-                        }
-                        ap_offset += 2;
-                        if ap_offset > param_ap_offset_end {
+                        let var = array_args_data_iter.next().unwrap();
+                        casm_build_extend! {ctx,
+                            const length = values.len();
+                            tempvar start = var;
+                            tempvar end = var + length;
+                        };
+                        param_accum_size += 2;
+                        if param_accum_size > ty_size {
                             return Err(Error::ArgumentUnaligned {
                                 param_index,
                                 arg_index,
@@ -473,108 +492,134 @@ fn create_entry_code(
         });
     }
 
-    let before_final_call = ctx.current_code_offset;
+    casm_build_extend!(ctx, let () = call FUNCTION;);
 
-    let return_type_id = signature
-        .ret_types
-        .last()
-        .ok_or(Error::NoRetTypesInSignature)?;
-    let return_type_size = type_sizes
-        .get(return_type_id)
-        .cloned()
-        .ok_or_else(|| Error::NoTypeSizeForId(return_type_id.clone()))?;
-    let builtin_count: i16 = builtins.len().into_or_panic();
-    let builtin_locations: Vec<i16> = builtins
-        .iter()
-        .enumerate()
-        .map(|(i, name)| {
-            let fp_loc = i.into_or_panic::<i16>() - builtin_count - 2;
-            let generic = match name {
-                BuiltinName::range_check => RangeCheckType::ID,
-                BuiltinName::pedersen => PedersenType::ID,
-                BuiltinName::bitwise => BitwiseType::ID,
-                BuiltinName::ec_op => EcOpType::ID,
-                BuiltinName::poseidon => PoseidonType::ID,
-                BuiltinName::segment_arena => SegmentArenaType::ID,
-                BuiltinName::keccak
-                | BuiltinName::ecdsa
-                | BuiltinName::output
-                | BuiltinName::range_check96
-                | BuiltinName::add_mod
-                | BuiltinName::mul_mod => return fp_loc,
-            };
-            signature
-                .ret_types
-                .iter()
-                .position(|ty| {
-                    sierra_program_registry
-                        .get_type(ty)
-                        .unwrap()
-                        .info()
-                        .long_id
-                        .generic_id
-                        == generic
-                })
-                .map(|i| (signature.ret_types.len() - i).into_or_panic())
-                .unwrap_or(fp_loc)
-        })
-        .collect();
-    if copy_to_output_builtin {
-        assert!(
-            builtins.iter().contains(&BuiltinName::output),
-            "Output builtin is required for proof mode or append_return_values"
-        );
-    }
-
-    let final_call_size =
-        // The call.
-        2
-        // The copying of the return values to the output segment. 
-        + if copy_to_output_builtin { return_type_size.into_or_panic::<usize>() + 1 } else { 0 }
-        // Rewriting the builtins to top of the stack.
-        + builtins.len()
-        // The return or infinite loop.
-        + if config.proof_mode { 2 } else { 1 };
-    let offset = final_call_size
-        + casm_program.debug_info.sierra_statement_info[func.entry_point.0].code_offset;
-
-    casm_extend!(ctx, call rel offset;);
-
-    if copy_to_output_builtin {
-        let Some(output_builtin_idx) = builtins.iter().position(|b| b == &BuiltinName::output)
-        else {
-            panic!("Output builtin is required for proof mode or append_return_values.");
+    let return_type_id = signature.ret_types.last();
+    let return_type_size = return_type_id
+        .and_then(|id| type_sizes.get(id).cloned())
+        .unwrap_or_default();
+    let mut offset: i16 = 0;
+    for ty in signature.ret_types.iter().rev() {
+        let info = get_info(sierra_program_registry, ty)
+            .ok_or_else(|| Error::NoInfoForType(ty.clone()))?;
+        offset += type_sizes[ty];
+        let generic_ty = &info.long_id.generic_id;
+        let Some(var) = builtin_vars.get_mut(generic_ty) else {
+            continue;
         };
-        let output_fp_offset: i16 = builtin_locations[output_builtin_idx];
-        for (i, j) in (1..return_type_size + 1).rev().enumerate() {
-            casm_extend! {ctx,
-                // [ap -j] is where each return value is located in memory
-                // [[fp + output_fp_offet] + 0] is the base of the output segment
-                [ap - j] = [[fp + output_fp_offset] + i as i16];
-            };
+        *var = ctx.add_var(CellExpression::Deref(deref!([ap - offset])));
+    }
+
+    if copy_to_output_builtin {
+        let output_ptr = output_ptr.unwrap();
+        let outputs = (1..(return_type_size + 1))
+            .rev()
+            .map(|i| ctx.add_var(CellExpression::Deref(deref!([ap - i]))))
+            .collect_vec();
+        for output in outputs {
+            casm_build_extend!(ctx, assert output = *(output_ptr++););
         }
     }
-    let mut ret_builtin_offset = return_type_size - 1;
-    for (builtin, location) in builtins.iter().zip(builtin_locations) {
-        if builtin == &BuiltinName::output && copy_to_output_builtin {
-            casm_extend!(ctx, [ap + 0] = [fp + location] + return_type_size, ap++;);
-        } else if location < 0 {
-            casm_extend!(ctx, [ap + 0] = [fp + location], ap++;);
-        } else {
-            casm_extend!(ctx, [ap + 0] = [ap - (ret_builtin_offset + location)], ap++;);
+    // Helper to get a variable for a given builtin.
+    // Fails for builtins that will never be present.
+    let get_var = |name: &BuiltinName| match name {
+        BuiltinName::output => output_ptr.unwrap(),
+        BuiltinName::range_check => builtin_vars[&RangeCheckType::ID],
+        BuiltinName::pedersen => builtin_vars[&PedersenType::ID],
+        BuiltinName::bitwise => builtin_vars[&BitwiseType::ID],
+        BuiltinName::ec_op => builtin_vars[&EcOpType::ID],
+        BuiltinName::poseidon => builtin_vars[&PoseidonType::ID],
+        BuiltinName::segment_arena => builtin_vars[&SegmentArenaType::ID],
+        BuiltinName::keccak
+        | BuiltinName::ecdsa
+        | BuiltinName::range_check96
+        | BuiltinName::add_mod
+        | BuiltinName::mul_mod => unreachable!(),
+    };
+    if copy_to_output_builtin && got_segment_arena {
+        // Copying the final builtins into a local variables.
+        for (i, builtin) in builtins.iter().enumerate() {
+            let var = get_var(builtin);
+            let local = ctx.add_var(CellExpression::Deref(deref!([fp + i.to_i16().unwrap()])));
+            casm_build_extend!(ctx, assert local = var;);
         }
-        ret_builtin_offset += 1;
+        let segment_arena_ptr = get_var(&BuiltinName::segment_arena);
+        // Validating the segment arena's segments are one after the other.
+        casm_build_extend! {ctx,
+            tempvar n_segments = segment_arena_ptr[-2];
+            tempvar n_finalized = segment_arena_ptr[-1];
+            assert n_segments = n_finalized;
+            jump STILL_LEFT_PRE if n_segments != 0;
+            rescope{};
+            jump DONE_VALIDATION;
+            STILL_LEFT_PRE:
+            const one = 1;
+            tempvar infos = segment_arena_ptr[-3];
+            tempvar remaining_segments = n_segments - one;
+            rescope{infos = infos, remaining_segments = remaining_segments};
+            LOOP_START:
+            jump STILL_LEFT_LOOP if remaining_segments != 0;
+            rescope{};
+            jump DONE_VALIDATION;
+            STILL_LEFT_LOOP:
+            const one = 1;
+            const three = 3;
+            tempvar prev_end = infos[1];
+            tempvar curr_start = infos[3];
+            assert curr_start = prev_end + one;
+            tempvar next_infos = infos + three;
+            tempvar next_remaining_segments = remaining_segments - one;
+            rescope{infos = next_infos, remaining_segments = next_remaining_segments};
+            #{ steps = 0; }
+            jump LOOP_START;
+            DONE_VALIDATION:
+        };
+        // Copying the final builtins from locals into the top of the stack.
+        for i in 0..builtins.len().to_i16().unwrap() {
+            let local = ctx.add_var(CellExpression::Deref(deref!([fp + i])));
+            casm_build_extend!(ctx, tempvar _r = local;);
+        }
+    } else {
+        // Writing the final builtins into the top of the stack.
+        for builtin in &builtins {
+            let var = get_var(builtin);
+            casm_build_extend!(ctx, tempvar _r = var;);
+        }
     }
 
     if config.proof_mode {
-        casm_extend!(ctx, jmp rel 0;);
+        casm_build_extend! {ctx,
+            INFINITE_LOOP:
+            // To enable the merge of the branches.
+            #{ steps = 0; }
+            jump INFINITE_LOOP;
+        };
     } else {
-        casm_extend!(ctx, ret;);
+        casm_build_extend!(ctx, ret;);
     }
-
-    assert_eq!(before_final_call + final_call_size, ctx.current_code_offset);
-
-    Ok((ctx, builtins))
+    let result = ctx.build(["FUNCTION"]);
+    let [call_inst] = result.branches[0].1.as_slice() else {
+        panic!("Expected a single relocation");
+    };
+    let mut instructions = result.instructions;
+    let instruction_sizes = instructions.iter().map(|inst| inst.body.op_size());
+    let prev_call_size: usize = instruction_sizes.clone().take(*call_inst).sum();
+    let post_call_size: usize = instruction_sizes.skip(*call_inst).sum();
+    let InstructionBody::Call(inst) = &mut instructions[*call_inst].body else {
+        panic!("Expected call instruction");
+    };
+    inst.target = deref_or_immediate!(
+        post_call_size
+            + casm_program.debug_info.sierra_statement_info[func.entry_point.0].code_offset
+    );
+    Ok((
+        CasmContext {
+            instructions,
+            current_code_offset: prev_call_size + post_call_size,
+            current_hints: vec![],
+        },
+        builtins,
+    ))
 }
 
 fn get_info<'a>(
@@ -585,28 +630,6 @@ fn get_info<'a>(
         .get_type(ty)
         .ok()
         .map(|ctc| ctc.info())
-}
-
-/// Creates the metadata required for a Sierra program lowering to casm.
-fn create_metadata(
-    sierra_program: &cairo_lang_sierra::program::Program,
-    metadata_config: Option<MetadataComputationConfig>,
-) -> Result<Metadata, VirtualMachineError> {
-    if let Some(metadata_config) = metadata_config {
-        calc_metadata(sierra_program, metadata_config).map_err(|err| match err {
-            MetadataError::ApChangeError(_) => VirtualMachineError::Unexpected,
-            MetadataError::CostError(_) => VirtualMachineError::Unexpected,
-        })
-    } else {
-        Ok(Metadata {
-            ap_change_info: calc_ap_changes(sierra_program, |_, _| 0)
-                .map_err(|_| VirtualMachineError::Unexpected)?,
-            gas_info: GasInfo {
-                variable_values: Default::default(),
-                function_costs: Default::default(),
-            },
-        })
-    }
 }
 
 fn get_function_builtins(
@@ -645,7 +668,7 @@ fn get_function_builtins(
 
 fn fetch_return_values(
     return_type_size: i16,
-    return_type_id: &ConcreteTypeId,
+    return_type_id: Option<&ConcreteTypeId>,
     vm: &VirtualMachine,
     builtin_count: i16,
     fetch_from_output: bool,
@@ -664,10 +687,12 @@ fn fetch_return_values(
     };
     // Check if this result is a Panic result
     if return_type_id
-        .debug_name
-        .as_ref()
-        .ok_or_else(|| Error::TypeIdNoDebugName(return_type_id.clone()))?
-        .starts_with("core::panics::PanicResult::")
+        .and_then(|id| {
+            id.debug_name
+                .as_ref()
+                .map(|name| name.starts_with("core::panics::PanicResult::"))
+        })
+        .unwrap_or_default()
     {
         // Check the failure flag (aka first return value)
         if return_values.first() != Some(&MaybeRelocatable::from(0)) {
@@ -723,14 +748,14 @@ fn finalize_builtins(
     let mut builtin_name_to_stack_pointer = HashMap::new();
     for (id, size) in ret_types_and_sizes {
         if let Some(ref name) = id.debug_name {
-            let builtin_name = match &*name.to_string() {
-                "RangeCheck" => RANGE_CHECK_BUILTIN_NAME,
-                "Poseidon" => POSEIDON_BUILTIN_NAME,
-                "EcOp" => EC_OP_BUILTIN_NAME,
-                "Bitwise" => BITWISE_BUILTIN_NAME,
-                "Pedersen" => HASH_BUILTIN_NAME,
-                "Output" => OUTPUT_BUILTIN_NAME,
-                "Ecdsa" => SIGNATURE_BUILTIN_NAME,
+            let builtin_name = match name.as_str() {
+                "RangeCheck" => BuiltinName::range_check,
+                "Poseidon" => BuiltinName::poseidon,
+                "EcOp" => BuiltinName::ec_op,
+                "Bitwise" => BuiltinName::bitwise,
+                "Pedersen" => BuiltinName::pedersen,
+                "Output" => BuiltinName::output,
+                "Ecdsa" => BuiltinName::ecdsa,
                 _ => {
                     stack_pointer.offset += size as usize;
                     continue;
@@ -749,11 +774,16 @@ fn finalize_builtins(
 fn serialize_output(
     return_values: &[MaybeRelocatable],
     vm: &mut VirtualMachine,
-    return_type_id: &ConcreteTypeId,
+    return_type_id: Option<&ConcreteTypeId>,
     sierra_program_registry: &ProgramRegistry<CoreType, CoreLibfunc>,
     type_sizes: &UnorderedHashMap<ConcreteTypeId, i16>,
 ) -> String {
     let mut output_string = String::new();
+    let return_type_id = if let Some(id) = return_type_id {
+        id
+    } else {
+        return output_string;
+    };
     let mut return_values_iter = return_values.iter().peekable();
     serialize_output_inner(
         &mut return_values_iter,
@@ -1101,6 +1131,10 @@ fn serialize_output_inner<'a>(
                 type_sizes,
             )
         }
+        cairo_lang_sierra::extensions::core::CoreTypeConcrete::GasBuiltin(_info) => {
+            // Ignore it
+            let _ = return_values_iter.next();
+        },
         _ => panic!("Unexpected return type")
     }
 }
@@ -1116,7 +1150,9 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use cairo_lang_compiler::{compile_cairo_project_at_path, CompilerConfig};
+    use cairo_lang_compiler::{
+        compile_prepared_db, db::RootDatabase, project::setup_project, CompilerConfig,
+    };
     use cairo_vm::types::relocatable::Relocatable;
     use rstest::rstest;
 
@@ -1125,8 +1161,13 @@ mod tests {
             replace_ids: true,
             ..CompilerConfig::default()
         };
-
-        compile_cairo_project_at_path(Path::new(filename), compiler_config).unwrap()
+        let mut db = RootDatabase::builder()
+            .detect_corelib()
+            .skip_auto_withdraw_gas()
+            .build()
+            .unwrap();
+        let main_crate_ids = setup_project(&mut db, Path::new(filename)).unwrap();
+        compile_prepared_db(&mut db, main_crate_ids, compiler_config).unwrap()
     }
 
     fn main_hash_panic_result(sierra_program: &SierraProgram) -> bool {

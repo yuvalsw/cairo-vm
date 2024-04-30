@@ -32,16 +32,16 @@ pub enum HintError {
     WrongHintData,
     #[error("Unknown identifier {0}")]
     UnknownIdentifier(Box<str>),
-    #[error("Expected ids.{} at address {} to be an Integer value", (*.0).0, (*.0).1)]
-    IdentifierNotInteger(Box<(String, Relocatable)>),
-    #[error("Expected ids.{} at address {} to be a Relocatable value", (*.0).0, (*.0).1)]
-    IdentifierNotRelocatable(Box<(String, Relocatable)>),
+    #[error("Expected ids.{} to be an Integer value", (*.0))]
+    IdentifierNotInteger(Box<str>),
+    #[error("Expected ids.{} to be a Relocatable value", (*.0))]
+    IdentifierNotRelocatable(Box<str>),
     #[error("ids.{} has no member {} or it is of incorrect type", (*.0).0, (*.0).1)]
     IdentifierHasNoMember(Box<(String, String)>),
     #[error("Unknown identifier")]
     UnknownIdentifierInternal,
-    #[error("Wrong identifier type at address {0}")]
-    WrongIdentifierTypeInternal(Box<Relocatable>),
+    #[error("Wrong identifier type")]
+    WrongIdentifierTypeInternal,
     #[error("Hint Error: {0}")]
     CustomHint(Box<str>),
     #[error("Missing constant: {0}")]

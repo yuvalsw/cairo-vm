@@ -1,3 +1,4 @@
+pub mod builtin_name;
 pub mod errors;
 pub mod exec_scope;
 pub mod instance_definitions;

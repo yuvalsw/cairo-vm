@@ -16,7 +16,7 @@ Now that you have the dependencies necessary to run the tests, you can run:
 make test
 ```
 
-To execute a cairo 1 program
+To execute a Cairo 1 program (either as Cairo 1 source file or Sierra)
 
 ```bash
 cargo run ../cairo_programs/cairo-1-programs/fibonacci.cairo 
@@ -68,3 +68,44 @@ The cairo1-run cli supports the following optional arguments:
 * `--cairo_pie_output <CAIRO_PIE_OUTPUT>`: Receives the name of a file and outputs the Cairo PIE into it. Can only be used if proof_mode, is not enabled.
 
 * `--append_return_values`: Adds extra instructions to the program in order to append the return values to the output builtin's segment. This is the default behaviour for proof_mode.
+
+# Running scarb projects
+
+As cairo1-run skips gas checks when running, you will need to add the following to your Scarb.toml to ensure that compilation is done without adding gas checks:
+
+```toml
+[cairo]
+enable-gas = false
+```
+
+First compile your project running `scarb build`
+
+Then run the compiled project's sierra file located at `project_name/target/project_name.sierra.json`
+
+Example:
+```bash
+  cargo run path-to-project/target/project_name.sierra.json 
+```
+
+# Known bugs & issues
+
+## Libfunc `get_builtin_costs` &  function `poseidon_hash_many`
+Compiling without gas checks removes libfuncs associated with gas checks that are generated during compilation but it cannot remove those in the cairo code itself. Therefore code using the external functions on the `gas` corelib moudle (`withdraw_gas`, `withdraw_gas_all` & `get_builtin_costs`) will fail to compile.
+One notable case of this issue is the `poseidon_hash_span` function, which uses `get_builtin_costs` in its implementation. We advise using the `HashStateTrait` impl instead. The `poseidon_hash_span` function can also be modified so that it no longer relies on gas, an example of this can be found on the test file `poseidon.cairo` under the `cairo_porgrams/cairo-1-programs` folder.
+
+## Nullable<Box<T>>
+There is currently a bug in cairo 2.6.3 affecting `Nullable<Box<T>>` types.
+Tracking issue: https://github.com/starkware-libs/cairo/issues/5411
+
+Proposed solution:
+
+Add the helper function:
+```
+#[inline(never)]
+fn identity<T>(t: T) -> T { t }
+```
+
+And use it when creating the `Nullable<Box<T>>`:
+```
+NullableTrait::<Box<T>::new(BoxTrait::new(identity(value)))
+```

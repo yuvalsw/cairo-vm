@@ -168,9 +168,9 @@ impl BitwiseBuiltinRunner {
 mod tests {
     use super::*;
     use crate::relocatable;
-    use crate::serde::deserialize_program::BuiltinName;
+    use crate::types::builtin_name::BuiltinName;
     use crate::vm::errors::memory_errors::MemoryError;
-    use crate::vm::runners::builtin_runner::{BuiltinRunner, BITWISE_BUILTIN_NAME};
+    use crate::vm::runners::builtin_runner::BuiltinRunner;
     use crate::vm::vm_core::VirtualMachine;
     use crate::Felt252;
     use crate::{
@@ -245,7 +245,7 @@ mod tests {
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
             Err(RunnerError::InvalidStopPointer(Box::new((
-                BITWISE_BUILTIN_NAME,
+                BuiltinName::bitwise,
                 relocatable!(0, 995),
                 relocatable!(0, 0)
             ))))
@@ -296,7 +296,7 @@ mod tests {
 
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
-            Err(RunnerError::NoStopPointer(Box::new(BITWISE_BUILTIN_NAME)))
+            Err(RunnerError::NoStopPointer(Box::new(BuiltinName::bitwise)))
         );
     }
 

@@ -2,7 +2,7 @@ use serde::Serialize;
 
 #[derive(Serialize, Debug, PartialEq)]
 pub(crate) struct DilutedPoolInstanceDef {
-    pub(crate) units_per_step: u32,
+    pub(crate) units_per_step: u32, // 2 ^ log_units_per_step (for cairo_lang comparison)
     pub(crate) spacing: u32,
     pub(crate) n_bits: u32,
 }

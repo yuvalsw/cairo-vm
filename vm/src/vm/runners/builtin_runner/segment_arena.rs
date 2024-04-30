@@ -88,8 +88,8 @@ fn gen_arg(segments: &mut MemorySegmentManager, data: &[MaybeRelocatable; 3]) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::builtin_name::BuiltinName;
     use crate::vm::errors::runner_errors::RunnerError;
-    use crate::vm::runners::builtin_runner::SEGMENT_ARENA_BUILTIN_NAME;
     use crate::vm::vm_core::VirtualMachine;
     use crate::{relocatable, utils::test_utils::*, vm::runners::builtin_runner::BuiltinRunner};
     #[cfg(not(feature = "std"))]
@@ -153,7 +153,7 @@ mod tests {
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
             Err(RunnerError::InvalidStopPointer(Box::new((
-                SEGMENT_ARENA_BUILTIN_NAME,
+                BuiltinName::segment_arena,
                 relocatable!(0, 3),
                 relocatable!(0, 0)
             ))))
@@ -229,7 +229,7 @@ mod tests {
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
             Err(RunnerError::NoStopPointer(Box::new(
-                SEGMENT_ARENA_BUILTIN_NAME
+                BuiltinName::segment_arena
             )))
         );
     }

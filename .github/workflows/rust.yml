@@ -724,3 +724,43 @@ jobs:
         
     - name: Run script
       run: ./vm/src/tests/compare_factorial_outputs_all_layouts.sh
+
+  compare-run-from-cairo-pie-all-outputs:
+    name: Compare all outputs from running Cairo PIEs
+    needs: [ build-programs, build-release, run-cairo-release ]
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Python3 Build
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+      
+    - name: Install cairo-lang and deps
+      run: pip install -r requirements.txt
+      
+    - name: Fetch release binary
+      uses: actions/cache/restore@v3
+      with:
+        key: cli-bin-rel-${{ github.sha }}
+        path: target/release/cairo-vm-cli
+        fail-on-cache-miss: true
+    
+    - name: Fetch traces for cairo-vm
+      uses: actions/cache/restore@v3
+      with:
+        path: |
+          cairo_programs/**/*.memory
+          cairo_programs/**/*.trace
+          cairo_programs/**/*.air_public_input
+          cairo_programs/**/*.air_private_input
+          cairo_programs/**/*.pie.zip
+        key: cairo_test_programs-release-trace-cache-${{ github.sha }}
+        fail-on-cache-miss: true
+   
+    - name: Run comparison
+      run: ./vm/src/tests/compare_all_pie_outputs.sh
+

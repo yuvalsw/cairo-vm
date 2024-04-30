@@ -48,12 +48,10 @@ pub fn get_ptr_from_var_name(
     match get_ptr_from_reference(vm, reference, ap_tracking) {
         // Map internal errors into more descriptive variants
         Ok(val) => Ok(val),
-        Err(HintError::WrongIdentifierTypeInternal(var_addr)) => Err(
-            HintError::IdentifierNotRelocatable(Box::new((var_name.to_string(), *var_addr))),
-        ),
-        _ => Err(HintError::UnknownIdentifier(
-            var_name.to_string().into_boxed_str(),
+        Err(HintError::WrongIdentifierTypeInternal) => Err(HintError::IdentifierNotRelocatable(
+            Box::<str>::from(var_name),
         )),
+        _ => Err(HintError::UnknownIdentifier(Box::<str>::from(var_name))),
     }
 }
 
@@ -77,7 +75,7 @@ pub fn get_relocatable_from_var_name(
     ids_data
         .get(var_name)
         .and_then(|x| compute_addr_from_reference(x, vm, ap_tracking))
-        .ok_or_else(|| HintError::UnknownIdentifier(var_name.to_string().into_boxed_str()))
+        .ok_or_else(|| HintError::UnknownIdentifier(Box::<str>::from(var_name)))
 }
 
 //Gets the value of a variable name.
@@ -93,12 +91,10 @@ pub fn get_integer_from_var_name(
     match get_integer_from_reference(vm, reference, ap_tracking) {
         // Map internal errors into more descriptive variants
         Ok(val) => Ok(val),
-        Err(HintError::WrongIdentifierTypeInternal(var_addr)) => Err(
-            HintError::IdentifierNotInteger(Box::new((var_name.to_string(), *var_addr))),
-        ),
-        _ => Err(HintError::UnknownIdentifier(
-            var_name.to_string().into_boxed_str(),
-        )),
+        Err(HintError::WrongIdentifierTypeInternal) => {
+            Err(HintError::IdentifierNotInteger(Box::<str>::from(var_name)))
+        }
+        _ => Err(HintError::UnknownIdentifier(Box::<str>::from(var_name))),
     }
 }
 
@@ -111,7 +107,7 @@ pub fn get_maybe_relocatable_from_var_name<'a>(
 ) -> Result<MaybeRelocatable, HintError> {
     let reference = get_reference_from_var_name(var_name, ids_data)?;
     get_maybe_relocatable_from_reference(vm, reference, ap_tracking)
-        .ok_or_else(|| HintError::UnknownIdentifier(var_name.to_string().into_boxed_str()))
+        .ok_or_else(|| HintError::UnknownIdentifier(Box::<str>::from(var_name)))
 }
 
 pub fn get_reference_from_var_name<'a>(
@@ -120,7 +116,7 @@ pub fn get_reference_from_var_name<'a>(
 ) -> Result<&'a HintReference, HintError> {
     ids_data
         .get(var_name)
-        .ok_or_else(|| HintError::UnknownIdentifier(var_name.to_string().into_boxed_str()))
+        .ok_or_else(|| HintError::UnknownIdentifier(Box::<str>::from(var_name)))
 }
 
 pub fn get_constant_from_var_name<'a>(
@@ -137,7 +133,6 @@ pub fn get_constant_from_var_name<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stdlib::string::ToString;
 
     use crate::{
         hint_processor::hint_processor_definition::HintReference,
@@ -218,7 +213,7 @@ mod tests {
 
         assert_matches!(
             get_ptr_from_var_name("value", &vm, &ids_data, &ApTracking::new()),
-            Err(HintError::IdentifierNotRelocatable(bx)) if *bx == ("value".to_string(), (1,0).into())
+            Err(HintError::IdentifierNotRelocatable(bx)) if bx.as_ref() == "value"
         );
     }
 
@@ -274,7 +269,7 @@ mod tests {
 
         assert_matches!(
             get_integer_from_var_name("value", &vm, &ids_data, &ApTracking::new()),
-            Err(HintError::IdentifierNotInteger(bx)) if *bx == ("value".to_string(), (1,0).into())
+            Err(HintError::IdentifierNotInteger(bx)) if bx.as_ref() == "value"
         );
     }
 }

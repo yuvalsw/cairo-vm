@@ -1,6 +1,6 @@
 use core::nullable::{nullable_from_box, match_nullable, FromNullableResult};
 
-fn main() -> Felt252Dict<Nullable<Span<felt252>>> {
+fn main() -> SquashedFelt252Dict<Nullable<Span<felt252>>> {
     // Create the dictionary
     let mut d: Felt252Dict<Nullable<Span<felt252>>> = Default::default();
 
@@ -11,5 +11,5 @@ fn main() -> Felt252Dict<Nullable<Span<felt252>>> {
     // Insert it as a `Span`
     d.insert(66675, nullable_from_box(BoxTrait::new(a.span())));
     d.insert(66676, nullable_from_box(BoxTrait::new(b.span())));
-    d
+    d.squash()
 }

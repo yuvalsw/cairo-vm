@@ -2,6 +2,7 @@
 #![allow(clippy::explicit_auto_deref)]
 
 use crate::stdlib::{collections::HashSet, prelude::*};
+use crate::types::builtin_name::BuiltinName;
 use crate::types::layout_name::LayoutName;
 use thiserror_no_std::Error;
 
@@ -40,7 +41,7 @@ pub enum RunnerError {
     #[error("EcOpBuiltin: point {0:?} is not on the curve")]
     PointNotOnCurve(Box<(Felt252, Felt252)>),
     #[error("Builtin(s) {:?} not present in layout {}", (*.0).0, (*.0).1)]
-    NoBuiltinForInstance(Box<(HashSet<&'static str>, LayoutName)>),
+    NoBuiltinForInstance(Box<(HashSet<BuiltinName>, LayoutName)>),
     #[error("end_run called twice.")]
     EndRunCalledTwice,
     #[error("end_run must be called before finalize_segments.")]
@@ -52,11 +53,11 @@ pub enum RunnerError {
     #[error("finalize_segments called but proof_mode is not enabled")]
     FinalizeSegmentsNoProofMode,
     #[error("Invalid stop pointer for {}: Stop pointer has value {} but builtin segment is {}", (*.0).0, (*.0).1, (*.0).2)]
-    InvalidStopPointerIndex(Box<(&'static str, Relocatable, usize)>),
+    InvalidStopPointerIndex(Box<(BuiltinName, Relocatable, usize)>),
     #[error("Invalid stop pointer for {}. Expected: {}, found: {}", (*.0).0, (*.0).1, (*.0).2)]
-    InvalidStopPointer(Box<(&'static str, Relocatable, Relocatable)>),
+    InvalidStopPointer(Box<(BuiltinName, Relocatable, Relocatable)>),
     #[error("No stop pointer found for builtin {0}")]
-    NoStopPointer(Box<&'static str>),
+    NoStopPointer(Box<BuiltinName>),
     #[error("Running in proof-mode but no __start__ label found, try compiling with proof-mode")]
     NoProgramStart,
     #[error("Running in proof-mode but no __end__ label found, try compiling with proof-mode")]
@@ -80,7 +81,7 @@ pub enum RunnerError {
     #[error("keccak_builtin: Failed to get first input address")]
     KeccakNoFirstInput,
     #[error("{}: Expected integer at address {}", (*.0).0, (*.0).1)]
-    BuiltinExpectedInteger(Box<(&'static str, Relocatable)>),
+    BuiltinExpectedInteger(Box<(BuiltinName, Relocatable)>),
     #[error("keccak_builtin: Failed to convert input cells to u64 values")]
     KeccakInputCellsNotU64,
     #[error("Unexpected ret_fp_segment size")]
@@ -106,13 +107,13 @@ pub enum RunnerError {
     #[error("Expected integer at address {} to be smaller than 2^{}. Got: {}.", (*.0).0, (*.0).1, (*.0).2)]
     WordExceedsModBuiltinWordBitLen(Box<(Relocatable, u32, Felt252)>),
     #[error("{}: Expected n >= 1. Got: {}.", (*.0).0, (*.0).1)]
-    ModBuiltinNLessThanOne(Box<(&'static str, usize)>),
+    ModBuiltinNLessThanOne(Box<(BuiltinName, usize)>),
     #[error("{}: Missing value at address {}.", (*.0).0, (*.0).1)]
-    ModBuiltinMissingValue(Box<(&'static str, Relocatable)>),
+    ModBuiltinMissingValue(Box<(BuiltinName, Relocatable)>),
     #[error("{}: n must be <= {}", (*.0).0, (*.0).1)]
-    FillMemoryMaxExceeded(Box<(&'static str, usize)>),
+    FillMemoryMaxExceeded(Box<(BuiltinName, usize)>),
     #[error("{0}: write_n_words value must be 0 after loop")]
-    WriteNWordsValueNotZero(&'static str),
+    WriteNWordsValueNotZero(BuiltinName),
     #[error("add_mod and mul_mod builtins must have the same n_words and word_bit_len.")]
     ModBuiltinsMismatchedInstanceDef,
     #[error("At least one of add_mod and mul_mod must be given.")]
@@ -120,11 +121,17 @@ pub enum RunnerError {
     #[error("Could not fill the values table, add_mod_index={0}, mul_mod_index={1}")]
     FillMemoryCoudNotFillTable(usize, usize),
     #[error("{}: {}", (*.0).0, (*.0).1)]
-    ModBuiltinSecurityCheck(Box<(&'static str, String)>),
+    ModBuiltinSecurityCheck(Box<(BuiltinName, String)>),
     #[error("{0} is missing")]
-    MissingBuiltin(&'static str),
+    MissingBuiltin(BuiltinName),
     #[error("The stop pointer of the missing builtin {0} must be 0")]
-    MissingBuiltinStopPtrNotZero(&'static str),
+    MissingBuiltinStopPtrNotZero(BuiltinName),
+    #[error("The number of steps in the Cairo PIE's execution resources does not match the number of steps in the RunResources")]
+    PieNStepsVsRunResourcesNStepsMismatch,
+    #[error("A Cairo PIE can not be ran in proof_mode")]
+    CairoPieProofMode,
+    #[error("{0}: Invalid additional data")]
+    InvalidAdditionalData(BuiltinName),
 }
 
 #[cfg(test)]

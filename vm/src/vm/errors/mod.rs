@@ -1,3 +1,4 @@
+pub mod cairo_pie_errors;
 pub mod cairo_run_errors;
 pub mod exec_scope_errors;
 pub mod hint_errors;

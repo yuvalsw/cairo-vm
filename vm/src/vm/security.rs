@@ -86,8 +86,8 @@ pub fn verify_secure_runner(
 mod test {
     use super::*;
     use crate::hint_processor::builtin_hint_processor::builtin_hint_processor_definition::BuiltinHintProcessor;
-    use crate::serde::deserialize_program::BuiltinName;
 
+    use crate::types::builtin_name::BuiltinName;
     use crate::types::relocatable::Relocatable;
 
     use crate::Felt252;

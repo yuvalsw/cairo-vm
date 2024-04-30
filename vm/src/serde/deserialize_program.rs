@@ -1,7 +1,7 @@
 //! # Program deserialization
 //!
 //! This module contains the logic for [`Program`] deserialization.
-//! Users shouldn't need to use it directly (except for [`BuiltinName`]).
+//! Users shouldn't need to use it directly
 //!
 //! To generate a [`Program`] from a JSON string, see [`Program::from_bytes()`].
 //! To do the same from a JSON file, see [`Program::from_file()`].
@@ -13,12 +13,11 @@ use crate::{
         prelude::*,
         sync::Arc,
     },
-    vm::runners::builtin_runner::RANGE_CHECK_96_BUILTIN_NAME,
+    types::builtin_name::BuiltinName,
+    utils::CAIRO_PRIME,
 };
 
 use crate::utils::PRIME_STR;
-use crate::vm::runners::builtin_runner::SEGMENT_ARENA_BUILTIN_NAME;
-use crate::vm::runners::builtin_runner::{ADD_MOD_BUILTIN_NAME, MUL_MOD_BUILTIN_NAME};
 use crate::Felt252;
 use crate::{
     serde::deserialize_utils,
@@ -28,55 +27,12 @@ use crate::{
         program::{HintsCollection, Program, SharedProgramData},
         relocatable::MaybeRelocatable,
     },
-    vm::runners::builtin_runner::{
-        BITWISE_BUILTIN_NAME, EC_OP_BUILTIN_NAME, HASH_BUILTIN_NAME, KECCAK_BUILTIN_NAME,
-        OUTPUT_BUILTIN_NAME, POSEIDON_BUILTIN_NAME, RANGE_CHECK_BUILTIN_NAME,
-        SIGNATURE_BUILTIN_NAME,
-    },
 };
 use serde::{de, de::MapAccess, de::SeqAccess, Deserialize, Deserializer, Serialize};
 
 use crate::serde::deserialize_utils::deserialize_felt_from_number;
 #[cfg(all(feature = "arbitrary", feature = "std"))]
 use arbitrary::{self, Arbitrary, Unstructured};
-
-// This enum is used to deserialize program builtins into &str and catch non-valid names
-#[cfg_attr(all(feature = "arbitrary", feature = "std"), derive(Arbitrary))]
-#[derive(Serialize, Deserialize, Debug, PartialEq, Copy, Clone, Eq, Hash)]
-#[allow(non_camel_case_types)]
-pub enum BuiltinName {
-    output,
-    range_check,
-    pedersen,
-    ecdsa,
-    keccak,
-    bitwise,
-    ec_op,
-    poseidon,
-    segment_arena,
-    range_check96,
-    add_mod,
-    mul_mod,
-}
-
-impl BuiltinName {
-    pub fn name(&self) -> &'static str {
-        match self {
-            BuiltinName::output => OUTPUT_BUILTIN_NAME,
-            BuiltinName::range_check => RANGE_CHECK_BUILTIN_NAME,
-            BuiltinName::pedersen => HASH_BUILTIN_NAME,
-            BuiltinName::ecdsa => SIGNATURE_BUILTIN_NAME,
-            BuiltinName::keccak => KECCAK_BUILTIN_NAME,
-            BuiltinName::bitwise => BITWISE_BUILTIN_NAME,
-            BuiltinName::ec_op => EC_OP_BUILTIN_NAME,
-            BuiltinName::poseidon => POSEIDON_BUILTIN_NAME,
-            BuiltinName::segment_arena => SEGMENT_ARENA_BUILTIN_NAME,
-            BuiltinName::range_check96 => RANGE_CHECK_96_BUILTIN_NAME,
-            BuiltinName::add_mod => ADD_MOD_BUILTIN_NAME,
-            BuiltinName::mul_mod => MUL_MOD_BUILTIN_NAME,
-        }
-    }
-}
 
 #[cfg_attr(all(feature = "arbitrary", feature = "std"), derive(Arbitrary, Clone))]
 #[derive(Deserialize, Debug)]

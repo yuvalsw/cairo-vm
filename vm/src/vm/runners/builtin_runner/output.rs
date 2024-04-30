@@ -1,4 +1,5 @@
 use crate::stdlib::{collections::HashMap, prelude::*};
+use crate::types::builtin_name::BuiltinName;
 use crate::types::relocatable::{MaybeRelocatable, Relocatable};
 use crate::vm::errors::memory_errors::MemoryError;
 use crate::vm::errors::runner_errors::RunnerError;
@@ -7,8 +8,6 @@ use crate::vm::runners::cairo_pie::{
 };
 use crate::vm::vm_core::VirtualMachine;
 use crate::vm::vm_memory::memory_segments::MemorySegmentManager;
-
-use super::OUTPUT_BUILTIN_NAME;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutputBuiltinState {
@@ -105,14 +104,14 @@ impl OutputBuiltinRunner {
     ) -> Result<Relocatable, RunnerError> {
         if self.included {
             let stop_pointer_addr = (pointer - 1)
-                .map_err(|_| RunnerError::NoStopPointer(Box::new(OUTPUT_BUILTIN_NAME)))?;
+                .map_err(|_| RunnerError::NoStopPointer(Box::new(BuiltinName::output)))?;
             let stop_pointer = segments
                 .memory
                 .get_relocatable(stop_pointer_addr)
-                .map_err(|_| RunnerError::NoStopPointer(Box::new(OUTPUT_BUILTIN_NAME)))?;
+                .map_err(|_| RunnerError::NoStopPointer(Box::new(BuiltinName::output)))?;
             if self.base as isize != stop_pointer.segment_index {
                 return Err(RunnerError::InvalidStopPointerIndex(Box::new((
-                    OUTPUT_BUILTIN_NAME,
+                    BuiltinName::output,
                     stop_pointer,
                     self.base,
                 ))));
@@ -121,7 +120,7 @@ impl OutputBuiltinRunner {
             let used = self.get_used_cells(segments).map_err(RunnerError::Memory)?;
             if stop_ptr != used {
                 return Err(RunnerError::InvalidStopPointer(Box::new((
-                    OUTPUT_BUILTIN_NAME,
+                    BuiltinName::output,
                     Relocatable::from((self.base as isize, used)),
                     Relocatable::from((self.base as isize, stop_ptr)),
                 ))));
@@ -144,6 +143,19 @@ impl OutputBuiltinRunner {
             pages: self.pages.clone(),
             attributes: self.attributes.clone(),
         })
+    }
+
+    pub fn extend_additional_data(
+        &mut self,
+        additional_data: &BuiltinAdditionalData,
+    ) -> Result<(), RunnerError> {
+        let additional_data = match additional_data {
+            BuiltinAdditionalData::Output(d) => d,
+            _ => return Err(RunnerError::InvalidAdditionalData(BuiltinName::output)),
+        };
+        self.pages.extend(additional_data.pages.clone());
+        self.attributes.extend(additional_data.attributes.clone());
+        Ok(())
     }
 
     pub(crate) fn set_stop_ptr_offset(&mut self, offset: usize) {
@@ -281,7 +293,7 @@ mod tests {
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
             Err(RunnerError::InvalidStopPointer(Box::new((
-                OUTPUT_BUILTIN_NAME,
+                BuiltinName::output,
                 relocatable!(0, 998),
                 relocatable!(0, 0)
             ))))
@@ -332,7 +344,7 @@ mod tests {
 
         assert_eq!(
             builtin.final_stack(&vm.segments, pointer),
-            Err(RunnerError::NoStopPointer(Box::new(OUTPUT_BUILTIN_NAME)))
+            Err(RunnerError::NoStopPointer(Box::new(BuiltinName::output)))
         );
     }
 
@@ -478,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn get_additional_info_no_pages_no_attributes() {
+    fn get_additional_data_no_pages_no_attributes() {
         let builtin = OutputBuiltinRunner::new(true);
         assert_eq!(
             builtin.get_additional_data(),
@@ -621,5 +633,27 @@ mod tests {
             public_memory,
             vec![(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2), (6, 2)]
         );
+    }
+
+    #[test]
+    fn get_and_extend_additional_data() {
+        let builtin_a = OutputBuiltinRunner {
+            base: 0,
+            pages: HashMap::from([(1, PublicMemoryPage { start: 0, size: 3 })]),
+            attributes: HashMap::from([("gps_fact_topology".to_string(), vec![0, 2, 0])]),
+            stop_ptr: None,
+            included: true,
+        };
+        let additional_data = builtin_a.get_additional_data();
+        let mut builtin_b = OutputBuiltinRunner {
+            base: 0,
+            pages: Default::default(),
+            attributes: Default::default(),
+            stop_ptr: None,
+            included: true,
+        };
+        builtin_b.extend_additional_data(&additional_data).unwrap();
+        assert_eq!(builtin_a.attributes, builtin_b.attributes);
+        assert_eq!(builtin_a.pages, builtin_b.pages);
     }
 }
