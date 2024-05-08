@@ -1453,6 +1453,10 @@ ids.simple_bootloader_output_start = segments.add()
 output_builtin_state = output_builtin.get_state()
 output_builtin.new_state(base=ids.simple_bootloader_output_start)";
 
+pub const READ_SIMPLE_BOOTLOADER_INPUT: &str =
+    "from starkware.cairo.bootloaders.simple_bootloader.objects import SimpleBootloaderInput
+simple_bootloader_input = SimpleBootloaderInput.Schema().load(program_input)";
+
 pub const BOOTLOADER_PREPARE_SIMPLE_BOOTLOADER_INPUT: &str =
     "simple_bootloader_input = bootloader_input";
 

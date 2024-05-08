@@ -58,6 +58,8 @@ struct Args {
         requires_all = ["proof_mode", "trace_file", "memory_file"]
     )]
     air_private_input: Option<String>,
+    #[clap(long = "program_input", requires = "proof_mode")]
+    program_input: Option<String>,
     #[clap(
         long = "cairo_pie_output",
         // We need to add these air_private_input & air_public_input or else
@@ -174,6 +176,12 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
         ..Default::default()
     };
 
+    let program_input = if let Some(ref program_input_file_path) = args.program_input {
+        Some(std::fs::read_to_string(program_input_file_path)?)
+    } else {
+        None
+    };
+
     let (cairo_runner, mut vm) = match {
         if args.run_from_cairo_pie {
             let pie = CairoPie::read_zip_file(&args.filename)?;
@@ -181,11 +189,16 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), Error> {
                 Default::default(),
                 RunResources::new(pie.execution_resources.n_steps),
             );
-            cairo_run::cairo_run_pie(&pie, &cairo_run_config, &mut hint_processor)
+            cairo_run::cairo_run_pie(&pie, &cairo_run_config, &mut hint_processor, &program_input)
         } else {
             let program_content = std::fs::read(args.filename).map_err(Error::IO)?;
             let mut hint_processor = BuiltinHintProcessor::new_empty();
-            cairo_run::cairo_run(&program_content, &cairo_run_config, &mut hint_processor)
+            cairo_run::cairo_run(
+                &program_content,
+                &cairo_run_config,
+                &mut hint_processor,
+                &program_input,
+            )
         }
     } {
         Ok(runner) => runner,

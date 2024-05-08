@@ -93,6 +93,7 @@ pub struct VirtualMachine {
     #[cfg(feature = "hooks")]
     pub(crate) hooks: crate::vm::hooks::Hooks,
     pub(crate) relocation_table: Option<Vec<usize>>,
+    pub program_input: Option<String>,
 }
 
 impl VirtualMachine {
@@ -122,6 +123,7 @@ impl VirtualMachine {
             #[cfg(feature = "hooks")]
             hooks: Default::default(),
             relocation_table: None,
+            program_input: None,
         }
     }
 
@@ -1266,6 +1268,7 @@ impl VirtualMachineBuilder {
             #[cfg(feature = "hooks")]
             hooks: self.hooks,
             relocation_table: None,
+            program_input: None,
         }
     }
 }

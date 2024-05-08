@@ -25,6 +25,8 @@ use crate::vm::errors::vm_errors::VirtualMachineError;
 use crate::vm::runners::builtin_runner::OutputBuiltinRunner;
 use crate::vm::vm_core::VirtualMachine;
 
+use super::types::SimpleBootloaderInput;
+
 fn replace_output_builtin(
     vm: &mut VirtualMachine,
     mut new_builtin: OutputBuiltinRunner,
@@ -82,6 +84,25 @@ pub fn prepare_simple_bootloader_output_segment(
         ids_data,
         ap_tracking,
     )?;
+
+    Ok(())
+}
+
+/// ```text
+/// Implements
+/// %{
+///     from starkware.cairo.bootloaders.simple_bootloader.objects import SimpleBootloaderInput
+///     simple_bootloader_input = SimpleBootloaderInput.Schema().load(program_input)";
+/// %}
+/// ```
+pub fn load_simple_bootloader_input(
+    vm: &mut VirtualMachine,
+    exec_scopes: &mut ExecutionScopes,
+) -> Result<(), HintError> {
+    let simple_bootloader_input: SimpleBootloaderInput =
+        serde_json::from_str(vm.program_input.clone().unwrap().as_str()).unwrap();
+
+    exec_scopes.insert_value(vars::SIMPLE_BOOTLOADER_INPUT, simple_bootloader_input);
 
     Ok(())
 }

@@ -45,11 +45,18 @@ pub enum PackedOutput {
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
-#[serde(untagged)]
+pub struct CairoPiePath {
+    path: PathBuf,
+    use_poseidon: bool,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(tag = "type")]
 pub enum Task {
     #[serde(deserialize_with = "deserialize_program")]
     Program(Program),
     Pie(CairoPie),
+    CairoPiePath(CairoPiePath),
 }
 
 fn deserialize_program<'de, D>(deserializer: D) -> Result<Program, D::Error>
@@ -67,11 +74,13 @@ impl Task {
         match self {
             Task::Program(program) => program.get_stripped_program(),
             Task::Pie(cairo_pie) => Ok(cairo_pie.metadata.program.clone()),
+            Task::CairoPiePath(cairo_pie) => Ok(cairo_pie.metadata.program.clone()),
         }
     }
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(transparent)]
 pub struct TaskSpec {
     pub task: Task,
 }
@@ -82,14 +91,14 @@ impl TaskSpec {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct SimpleBootloaderInput {
     pub fact_topologies_path: Option<PathBuf>,
     pub single_page: bool,
     pub tasks: Vec<TaskSpec>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct BootloaderInput {
     pub simple_bootloader_input: SimpleBootloaderInput,
     pub bootloader_config: BootloaderConfig,
