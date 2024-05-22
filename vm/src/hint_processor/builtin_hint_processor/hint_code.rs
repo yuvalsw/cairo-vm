@@ -954,6 +954,14 @@ ids.output1_high, ids.output1_mid = divmod(tmp, 2 ** 128)";
 
 pub const NONDET_N_GREATER_THAN_10: &str = "memory[ap] = to_felt_or_relocatable(ids.n >= 10)";
 pub const NONDET_N_GREATER_THAN_2: &str = "memory[ap] = to_felt_or_relocatable(ids.n >= 2)";
+
+pub const VALIDATE_HASH: &str = "# Validate hash.
+from starkware.cairo.bootloaders.hash_program import compute_program_hash_chain
+
+assert memory[ids.output_ptr + 1] == compute_program_hash_chain(
+    program=task.get_program(),
+    use_poseidon=bool(ids.use_poseidon)), 'Computed hash does not match input.'";
+
 pub const RANDOM_EC_POINT: &str = r#"from starkware.crypto.signature.signature import ALPHA, BETA, FIELD_PRIME
 from starkware.python.math_utils import random_ec_point
 from starkware.python.utils import to_bytes
@@ -1534,6 +1542,9 @@ pub const BOOTLOADER_SET_PACKED_OUTPUT_TO_SUBTASKS: &str =
 
 pub const BOOTLOADER_ASSERT_IS_COMPOSITE_PACKED_OUTPUT: &str =
     "assert isinstance(packed_output, CompositePackedOutput)";
+
+pub const BOOTLOADER_IS_POSEIDON: &str =
+    "memory[ap] = to_felt_or_relocatable(1 if task.use_poseidon else 0)";
 
 pub const SIMPLE_BOOTLOADER_PREPARE_TASK_RANGE_CHECKS: &str =
     "n_tasks = len(simple_bootloader_input.tasks)

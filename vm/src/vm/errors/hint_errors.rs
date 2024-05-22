@@ -1,7 +1,7 @@
 // The `(*.0).0` syntax of thiserror falsely triggers this clippy warning
 #![allow(clippy::explicit_auto_deref)]
 
-use crate::stdlib::prelude::*;
+use crate::{stdlib::prelude::*, types::errors::cairo_pie_error::CairoPieError};
 
 use thiserror_no_std::Error;
 
@@ -184,6 +184,8 @@ pub enum HintError {
     NPairBitsTooLowM,
     #[error("{0}")]
     SyscallError(Box<str>),
+    #[error(transparent)]
+    CairoPieError(#[from] CairoPieError),
 }
 
 #[cfg(test)]

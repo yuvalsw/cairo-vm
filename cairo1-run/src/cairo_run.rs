@@ -524,6 +524,7 @@ fn create_entry_code(
     // Fails for builtins that will never be present.
     let get_var = |name: &BuiltinName| match name {
         BuiltinName::output => output_ptr.unwrap(),
+        BuiltinName::output_builtin => output_ptr.unwrap(),
         BuiltinName::range_check => builtin_vars[&RangeCheckType::ID],
         BuiltinName::pedersen => builtin_vars[&PedersenType::ID],
         BuiltinName::bitwise => builtin_vars[&BitwiseType::ID],

@@ -15,6 +15,8 @@ use crate::hint_processor::builtin_hint_processor::bootloader::program_hash::com
 use crate::hint_processor::builtin_hint_processor::bootloader::program_loader::ProgramLoader;
 use crate::hint_processor::builtin_hint_processor::bootloader::types::{BootloaderVersion, Task};
 use crate::hint_processor::builtin_hint_processor::bootloader::vars;
+use crate::hint_processor::builtin_hint_processor::hint_utils::get_integer_from_var_name;
+use crate::hint_processor::builtin_hint_processor::hint_utils::insert_value_into_ap;
 use crate::hint_processor::builtin_hint_processor::hint_utils::{
     get_ptr_from_var_name, get_relocatable_from_var_name, insert_value_from_var_name,
 };
@@ -79,7 +81,6 @@ pub fn load_program_hint(
     let program_data_base: Relocatable = exec_scopes.get(vars::PROGRAM_DATA_BASE)?;
     let task: Task = exec_scopes.get(vars::TASK)?;
     let program = get_program_from_task(&task)?;
-
     let program_header_ptr = get_ptr_from_var_name("program_header", vm, ids_data, ap_tracking)?;
 
     // Offset of the builtin_list field in `ProgramHeader`, cf. execute_task.cairo
@@ -177,7 +178,53 @@ pub fn validate_hash(
         .into_owned();
 
     // Compute the hash of the program
-    let computed_program_hash = compute_program_hash_chain(&program, 0)
+    let computed_program_hash = compute_program_hash_chain(&program, 0, false)
+        .map_err(|e| {
+            HintError::CustomHint(format!("Could not compute program hash: {e}").into_boxed_str())
+        })?
+        .into();
+    let computed_program_hash = field_element_to_felt(computed_program_hash);
+
+    if program_hash != computed_program_hash {
+        return Err(HintError::AssertionFailed(
+            "Computed hash does not match input"
+                .to_string()
+                .into_boxed_str(),
+        ));
+    }
+
+    Ok(())
+}
+
+/// Implements
+/// # Validate hash.
+/// from starkware.cairo.bootloaders.hash_program import compute_program_hash_chain
+///
+/// assert memory[ids.output_ptr + 1] == compute_program_hash_chain(
+///     program=task.get_program(),
+///     use_poseidon=bool(ids.use_poseidon)), 'Computed hash does not match input.'
+pub fn validate_hash2(
+    vm: &mut VirtualMachine,
+    exec_scopes: &mut ExecutionScopes,
+    ids_data: &HashMap<String, HintReference>,
+    ap_tracking: &ApTracking,
+) -> Result<(), HintError> {
+    let task: Task = exec_scopes.get(vars::TASK)?;
+    let program = get_program_from_task(&task)?;
+
+    let output_ptr = get_ptr_from_var_name("output_ptr", vm, ids_data, ap_tracking)?;
+    let program_hash_ptr = (output_ptr + 1)?;
+
+    let program_hash = vm
+        .segments
+        .memory
+        .get_integer(program_hash_ptr)?
+        .into_owned();
+
+    // Compute the hash of the program
+    let use_poseidon =
+        get_integer_from_var_name("use_poseidon", vm, ids_data, ap_tracking)? != Felt252::ZERO;
+    let computed_program_hash = compute_program_hash_chain(&program, 0, use_poseidon)
         .map_err(|e| {
             HintError::CustomHint(format!("Could not compute program hash: {e}").into_boxed_str())
         })?
@@ -421,6 +468,25 @@ pub fn call_task(
             )
             .map_err(Into::<HintError>::into)?;
         }
+        Task::CairoPiePath(pie_path) => {
+            let cairo_pie = pie_path.read()?;
+            let program_address: Relocatable = exec_scopes.get("program_address")?;
+
+            // ret_pc = ids.ret_pc_label.instruction_offset_ - ids.call_task.instruction_offset_ + pc
+            // load_cairo_pie(
+            //     task=task.cairo_pie, memory=memory, segments=segments,
+            //     program_address=program_address, execution_segment_address= ap - n_builtins,
+            //     builtin_runners=builtin_runners, ret_fp=fp, ret_pc=ret_pc)
+            load_cairo_pie(
+                &cairo_pie,
+                vm,
+                program_address,
+                (vm.get_ap() - num_builtins)?,
+                vm.get_fp(),
+                vm.get_pc(),
+            )
+            .map_err(Into::<HintError>::into)?;
+        }
     }
 
     // output_runner_data = prepare_output_runner(
@@ -443,6 +509,28 @@ pub fn call_task(
     exec_scopes.enter_scope(new_task_locals);
 
     Ok(())
+}
+
+// Implements hint: "memory[ap] = to_felt_or_relocatable(1 if task.use_poseidon else 0)"
+pub fn is_poseidon_to_ap(
+    vm: &mut VirtualMachine,
+    exec_scopes: &mut ExecutionScopes,
+) -> Result<(), HintError> {
+    let task: Task = exec_scopes.get(vars::TASK)?;
+    insert_value_into_ap(
+        vm,
+        match &task {
+            Task::Program(_) => 0,
+            Task::Pie(_) => 0,
+            Task::CairoPiePath(pie_path) => {
+                if pie_path.use_poseidon {
+                    1
+                } else {
+                    0
+                }
+            }
+        },
+    )
 }
 
 mod util {
@@ -478,6 +566,7 @@ mod util {
                 Ok(Some(output_state))
             }
             Task::Pie(_) => Ok(None),
+            Task::CairoPiePath(_) => Ok(None),
         };
     }
 }

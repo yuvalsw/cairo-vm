@@ -1,3 +1,4 @@
+use crate::types::errors::cairo_pie_error::CairoPieError;
 use crate::Felt252;
 use serde::{de, Deserialize, Deserializer};
 
@@ -47,7 +48,15 @@ pub enum PackedOutput {
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct CairoPiePath {
     path: PathBuf,
-    use_poseidon: bool,
+    pub use_poseidon: bool,
+}
+
+impl CairoPiePath {
+    pub fn read(&self) -> Result<CairoPie, CairoPieError> {
+        let file = std::fs::File::open(&self.path)?;
+        let zip = zip::ZipArchive::new(file)?;
+        Ok(CairoPie::from_zip_archive(zip)?)
+    }
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -74,7 +83,7 @@ impl Task {
         match self {
             Task::Program(program) => program.get_stripped_program(),
             Task::Pie(cairo_pie) => Ok(cairo_pie.metadata.program.clone()),
-            Task::CairoPiePath(cairo_pie) => Ok(cairo_pie.metadata.program.clone()),
+            Task::CairoPiePath(pie_path) => Ok(Task::get_program(&Task::Pie(pie_path.read()?))?),
         }
     }
 }

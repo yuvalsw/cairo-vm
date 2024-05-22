@@ -393,13 +393,25 @@ impl CairoRunner {
                 BuiltinName::pedersen => vm
                     .builtin_runners
                     .push(HashBuiltinRunner::new(Some(32), true).into()),
+                BuiltinName::pedersen_builtin => vm
+                    .builtin_runners
+                    .push(HashBuiltinRunner::new(Some(32), true).into()),
                 BuiltinName::range_check => vm.builtin_runners.push(
+                    RangeCheckBuiltinRunner::<RC_N_PARTS_STANDARD>::new(Some(1), true).into(),
+                ),
+                BuiltinName::range_check_builtin => vm.builtin_runners.push(
                     RangeCheckBuiltinRunner::<RC_N_PARTS_STANDARD>::new(Some(1), true).into(),
                 ),
                 BuiltinName::output => vm
                     .builtin_runners
                     .push(OutputBuiltinRunner::new(true).into()),
+                BuiltinName::output_builtin => vm
+                    .builtin_runners
+                    .push(OutputBuiltinRunner::new(true).into()),
                 BuiltinName::ecdsa => vm
+                    .builtin_runners
+                    .push(SignatureBuiltinRunner::new(Some(1), true).into()),
+                BuiltinName::ecdsa_builtin => vm
                     .builtin_runners
                     .push(SignatureBuiltinRunner::new(Some(1), true).into()),
                 BuiltinName::bitwise => vm

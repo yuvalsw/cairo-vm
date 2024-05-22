@@ -1,12 +1,15 @@
 use super::{
     blake2s_utils::finalize_blake2s_v3,
-    bootloader::bootloader_hints::{
-        assert_is_composite_packed_output, assert_program_address, enter_packed_output_scope,
-        guess_pre_image_of_subtasks_output_hash, import_packed_output_schemas,
-        is_plain_packed_output, load_bootloader_config, load_simple_bootloader_input,
-        prepare_simple_bootloader_input, prepare_simple_bootloader_output_segment,
-        restore_bootloader_output, save_output_pointer, save_packed_outputs,
-        set_packed_output_to_subtasks,
+    bootloader::{
+        bootloader_hints::{
+            assert_is_composite_packed_output, assert_program_address, enter_packed_output_scope,
+            guess_pre_image_of_subtasks_output_hash, import_packed_output_schemas,
+            is_plain_packed_output, load_bootloader_config, load_simple_bootloader_input,
+            prepare_simple_bootloader_input, prepare_simple_bootloader_output_segment,
+            restore_bootloader_output, save_output_pointer, save_packed_outputs,
+            set_packed_output_to_subtasks,
+        },
+        execute_task_hints::is_poseidon_to_ap,
     },
     ec_recover::{
         ec_recover_divmod_n_packed, ec_recover_product_div_m, ec_recover_product_mod,
@@ -32,7 +35,7 @@ use super::{
 use crate::hint_processor::builtin_hint_processor::bootloader::bootloader_hints::compute_and_configure_fact_topologies;
 use crate::hint_processor::builtin_hint_processor::bootloader::execute_task_hints::{
     allocate_program_data_segment, append_fact_topologies, call_task, load_program_hint,
-    validate_hash, write_return_builtins_hint,
+    validate_hash, validate_hash2, write_return_builtins_hint,
 };
 use crate::hint_processor::builtin_hint_processor::bootloader::inner_select_builtins::select_builtin;
 use crate::hint_processor::builtin_hint_processor::bootloader::select_builtins::select_builtins_enter_scope;
@@ -872,6 +875,9 @@ impl HintProcessorLogic for BuiltinHintProcessor {
                     &hint_data.ap_tracking,
                 )
             }
+            hint_code::VALIDATE_HASH => {
+                validate_hash2(vm, exec_scopes, &hint_data.ids_data, &hint_data.ap_tracking)
+            }
             hint_code::READ_SIMPLE_BOOTLOADER_INPUT => {
                 load_simple_bootloader_input(vm, exec_scopes)
             }
@@ -913,6 +919,7 @@ impl HintProcessorLogic for BuiltinHintProcessor {
             hint_code::BOOTLOADER_ASSERT_IS_COMPOSITE_PACKED_OUTPUT => {
                 assert_is_composite_packed_output(exec_scopes)
             }
+            hint_code::BOOTLOADER_IS_POSEIDON => is_poseidon_to_ap(vm, exec_scopes),
             hint_code::SIMPLE_BOOTLOADER_PREPARE_TASK_RANGE_CHECKS => prepare_task_range_checks(
                 vm,
                 exec_scopes,

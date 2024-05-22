@@ -2,6 +2,8 @@ use crate::stdlib::prelude::*;
 use crate::utils::PRIME_STR;
 use thiserror_no_std::Error;
 
+use super::cairo_pie_error::CairoPieError;
+
 #[derive(Debug, Error)]
 pub enum ProgramError {
     #[cfg(feature = "std")]
@@ -19,6 +21,8 @@ pub enum ProgramError {
     StrippedProgramNoMain,
     #[error("Hint PC ({0}) is greater or equal to program length ({1})")]
     InvalidHintPc(usize, usize),
+    #[error(transparent)]
+    CairoPieError(#[from] CairoPieError),
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use starknet_crypto::{pedersen_hash, FieldElement};
+use starknet_crypto::{pedersen_hash, poseidon_hash_many, FieldElement};
 
 use crate::Felt252;
 
@@ -107,6 +107,7 @@ fn maybe_relocatable_to_field_element(
 pub fn compute_program_hash_chain(
     program: &StrippedProgram,
     bootloader_version: usize,
+    use_poseidon: bool,
 ) -> Result<FieldElement, ProgramHashError> {
     let program_main = program.main;
     let program_main = FieldElement::from(program_main);
@@ -136,14 +137,19 @@ pub fn compute_program_hash_chain(
     let data_chain_len_vec = vec![FieldElement::from(data_chain_len)];
 
     // Prepare a chain of iterators to feed to the hash function
-    let data_chain = vec![
+    let data_chain = [
         &data_chain_len_vec,
         &program_header,
         &builtin_list,
         &program_data,
     ];
 
-    let hash = compute_hash_chain(data_chain.iter().flat_map(|&v| v.iter()), pedersen_hash)?;
+    let hash = if use_poseidon {
+        let data: Vec<FieldElement> = data_chain.iter().flat_map(|&v| v.iter().copied()).collect();
+        poseidon_hash_many(&data)
+    } else {
+        compute_hash_chain(data_chain.iter().flat_map(|&v| v.iter()), pedersen_hash)?
+    };
     Ok(hash)
 }
 
@@ -198,7 +204,7 @@ mod tests {
         let stripped_program = program.get_stripped_program().unwrap();
         let bootloader_version = 0;
 
-        let program_hash = compute_program_hash_chain(&stripped_program, bootloader_version)
+        let program_hash = compute_program_hash_chain(&stripped_program, bootloader_version, false)
             .expect("Failed to compute program hash.");
 
         let program_hash_hex = format!("{:#x}", program_hash);

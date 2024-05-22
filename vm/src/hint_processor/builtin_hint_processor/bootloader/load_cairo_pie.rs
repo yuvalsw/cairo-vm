@@ -227,7 +227,7 @@ fn relocate_builtin_additional_data(
     vm: &mut VirtualMachine,
     relocation_table: &RelocationTable,
 ) -> Result<(), SignatureRelocationError> {
-    let ecdsa_additional_data = match cairo_pie.additional_data.0.get(&BuiltinName::ecdsa) {
+    let ecdsa_additional_data = match cairo_pie.additional_data.0.get(&BuiltinName::ecdsa_builtin) {
         Some(additional_data) => match additional_data {
             BuiltinAdditionalData::Signature(data) => data,
             _ => return Err(SignatureRelocationError::UnexpectedBuiltinDataType),

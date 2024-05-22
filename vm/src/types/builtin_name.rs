@@ -36,9 +36,13 @@ const MUL_MOD_BUILTIN_NAME_WITH_SUFFIX: &str = "mul_mod_builtin";
 #[allow(non_camel_case_types)]
 pub enum BuiltinName {
     output,
+    output_builtin,
     range_check,
+    range_check_builtin,
     pedersen,
+    pedersen_builtin,
     ecdsa,
+    ecdsa_builtin,
     keccak,
     bitwise,
     ec_op,
@@ -64,9 +68,13 @@ impl BuiltinName {
     pub fn to_str_with_suffix(self) -> &'static str {
         match self {
             BuiltinName::output => OUTPUT_BUILTIN_NAME_WITH_SUFFIX,
+            BuiltinName::output_builtin => OUTPUT_BUILTIN_NAME_WITH_SUFFIX,
             BuiltinName::range_check => RANGE_CHECK_BUILTIN_NAME_WITH_SUFFIX,
+            BuiltinName::range_check_builtin => RANGE_CHECK_BUILTIN_NAME_WITH_SUFFIX,
             BuiltinName::pedersen => HASH_BUILTIN_NAME_WITH_SUFFIX,
+            BuiltinName::pedersen_builtin => HASH_BUILTIN_NAME_WITH_SUFFIX,
             BuiltinName::ecdsa => SIGNATURE_BUILTIN_NAME_WITH_SUFFIX,
+            BuiltinName::ecdsa_builtin => SIGNATURE_BUILTIN_NAME_WITH_SUFFIX,
             BuiltinName::keccak => KECCAK_BUILTIN_NAME_WITH_SUFFIX,
             BuiltinName::bitwise => BITWISE_BUILTIN_NAME_WITH_SUFFIX,
             BuiltinName::ec_op => EC_OP_BUILTIN_NAME_WITH_SUFFIX,
@@ -92,9 +100,13 @@ impl BuiltinName {
     pub fn to_str(self) -> &'static str {
         match self {
             BuiltinName::output => OUTPUT_BUILTIN_NAME,
+            BuiltinName::output_builtin => OUTPUT_BUILTIN_NAME,
             BuiltinName::range_check => RANGE_CHECK_BUILTIN_NAME,
+            BuiltinName::range_check_builtin => RANGE_CHECK_BUILTIN_NAME,
             BuiltinName::pedersen => HASH_BUILTIN_NAME,
+            BuiltinName::pedersen_builtin => HASH_BUILTIN_NAME,
             BuiltinName::ecdsa => SIGNATURE_BUILTIN_NAME,
+            BuiltinName::ecdsa_builtin => SIGNATURE_BUILTIN_NAME,
             BuiltinName::keccak => KECCAK_BUILTIN_NAME,
             BuiltinName::bitwise => BITWISE_BUILTIN_NAME,
             BuiltinName::ec_op => EC_OP_BUILTIN_NAME,

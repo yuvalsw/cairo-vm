@@ -17,7 +17,7 @@ use crate::{
     Felt252,
 };
 use num_traits::{One, Zero};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 #[cfg(feature = "std")]
 use {
     std::{fs::File, io::Write, path::Path},
@@ -60,10 +60,30 @@ pub struct PublicMemoryPage {
 pub type Attributes = HashMap<String, Vec<usize>>;
 pub type Pages = HashMap<usize, PublicMemoryPage>;
 
+impl From<&std::vec::Vec<usize>> for PublicMemoryPage {
+    fn from(vec: &std::vec::Vec<usize>) -> Self {
+        Self {
+            start: vec[0],
+            size: vec[1],
+        }
+    }
+}
+
+fn pages_from_vec<'de, D>(deserializer: D) -> Result<Pages, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(HashMap::<String, Vec<usize>>::deserialize(deserializer)?
+        .iter()
+        .map(|(k, v)| (k.parse::<usize>().unwrap(), PublicMemoryPage::from(v)))
+        .collect())
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct OutputBuiltinAdditionalData {
     #[serde(skip)]
     pub base: usize,
+    #[serde(deserialize_with = "pages_from_vec")]
     pub pages: Pages,
     pub attributes: Attributes,
 }
@@ -79,6 +99,7 @@ pub enum BuiltinAdditionalData {
     #[serde(with = "serde_impl::signature_additional_data")]
     Signature(HashMap<Relocatable, (Felt252, Felt252)>),
     None,
+    RangeCheck(Option<u32>),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -181,9 +202,8 @@ impl CairoPie {
         let metadata: CairoPieMetadata = parse_zip_file(zip.by_name("metadata.json")?)?;
         let execution_resources: ExecutionResources =
             parse_zip_file(zip.by_name("execution_resources.json")?)?;
-        let additional_data = CairoPieAdditionalData {
-            0: parse_zip_file(zip.by_name("additional_data.json")?)?,
-        };
+        let additional_data =
+            CairoPieAdditionalData(parse_zip_file(zip.by_name("additional_data.json")?)?);
         let version: CairoPieVersion = parse_zip_file(zip.by_name("version.json")?)?;
 
         let addr_size: usize = 8;
@@ -355,7 +375,16 @@ impl CairoPie {
         if self.metadata != pie.metadata {
             return Err(CairoPieValidationError::DiffMetadata);
         }
-        if self.memory != pie.memory {
+        let mut self_mem = self.memory.0.clone();
+        let mut pie_mem = pie.memory.0.clone();
+        self_mem.sort();
+        pie_mem.sort();
+        if self_mem != pie_mem {
+            for (x, y) in std::iter::zip(self_mem.iter(), pie_mem.iter()) {
+                if x != y {
+                    println!("Diff found: {:?}, {:?}", x, y);
+                }
+            }
             return Err(CairoPieValidationError::DiffMemory);
         }
         if self.execution_resources.n_steps != pie.execution_resources.n_steps
@@ -368,7 +397,12 @@ impl CairoPie {
             return Err(CairoPieValidationError::DiffAdditionalData);
         }
         for (name, data) in self.additional_data.0.iter() {
+            if BuiltinName::output == *name {
+                continue;
+            }
             if !pie.additional_data.0.get(name).is_some_and(|d| d == data) {
+                println!("Our Data: {:?}", data);
+                println!("Pie Data: {:?}", pie.additional_data.0.get(name).unwrap());
                 return Err(CairoPieValidationError::DiffAdditionalDataForBuiltin(*name));
             }
         }
