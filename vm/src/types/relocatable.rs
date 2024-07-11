@@ -24,10 +24,32 @@ pub struct Relocatable {
 }
 
 #[cfg_attr(feature = "test_utils", derive(Arbitrary))]
-#[derive(Eq, Ord, Hash, PartialEq, PartialOrd, Clone, Serialize, Deserialize)]
+#[derive(Eq, Ord, Hash, PartialOrd, Clone, Serialize, Deserialize)]
 pub enum MaybeRelocatable {
     RelocatableValue(Relocatable),
     Int(Felt252),
+}
+
+impl PartialEq for MaybeRelocatable {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (MaybeRelocatable::RelocatableValue(x), MaybeRelocatable::RelocatableValue(y)) => {
+                x == y
+            }
+            (MaybeRelocatable::RelocatableValue(r), MaybeRelocatable::Int(i))
+                if r.segment_index == 0 && r.offset == 0 && i == &Felt252::ZERO =>
+            {
+                true
+            }
+            (MaybeRelocatable::Int(i), MaybeRelocatable::RelocatableValue(r))
+                if r.segment_index == 0 && r.offset == 0 && i == &Felt252::ZERO =>
+            {
+                true
+            }
+            (MaybeRelocatable::Int(x), MaybeRelocatable::Int(y)) => x == y,
+            _ => false,
+        }
+    }
 }
 
 // NOTE: implemented manually so we can format the felt properly

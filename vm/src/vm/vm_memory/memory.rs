@@ -218,6 +218,7 @@ impl Memory {
             Some(current_cell) => {
                 if current_cell != val {
                     //Existing memory cannot be changed
+                    println!("yg here");
                     return Err(MemoryError::InconsistentMemory(Box::new((
                         key,
                         current_cell,
